@@ -34,8 +34,9 @@ import sqlite3
 
 
 class Database:
-    def __init__(self, db_path="/home/ubuntu/mybot/db/database.db"):
-        # Use absolute path instead of relative
+    def __init__(self, db_path=os.path.join(os.path.dirname(__file__), "../db/database.db")):
+        db_path = os.path.abspath(db_path)
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)  # Ensure directory exists
         self.connection = sqlite3.connect(db_path)
 
         # rest of your code...
