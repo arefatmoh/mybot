@@ -28,13 +28,21 @@ from utils.validation import validate_job_post_data
 from utils.validation import validate_job_post
 from utils.validation import validate_job_post_data_for_job_preview
 
-# Get the directory where main.py is located
+
+
+# Get the absolute path to translations.json
 current_dir = os.path.dirname(os.path.abspath(__file__))
 translations_path = os.path.join(current_dir, "translations.json")
 
 # Load translations
-with open(translations_path, "r", encoding="utf-8") as file:
-    translations = json.load(file)
+try:
+    with open(translations_path, "r", encoding="utf-8") as file:
+        translations = json.load(file)
+except FileNotFoundError:
+    print(f"Error: translations.json not found at {translations_path}")
+    print("Current working directory:", os.getcwd())
+    print("Directory contents:", os.listdir('.'))
+    raise
 
 # Initialize Database
 db = Database()
