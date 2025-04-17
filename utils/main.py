@@ -28,8 +28,12 @@ from utils.validation import validate_job_post_data
 from utils.validation import validate_job_post
 from utils.validation import validate_job_post_data_for_job_preview
 
+# Get the directory where main.py is located
+current_dir = os.path.dirname(os.path.abspath(__file__))
+translations_path = os.path.join(current_dir, "translations.json")
+
 # Load translations
-with open("translations.json", "r", encoding="utf-8") as file:
+with open(translations_path, "r", encoding="utf-8") as file:
     translations = json.load(file)
 
 # Initialize Database
