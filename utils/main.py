@@ -111,8 +111,42 @@ def is_profile_complete(user_profile, db):
 
 #before
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Handles the bot startup. Checks user registration and directs them accordingly."""
+    """Handles the bot startup with testing notification, checks user registration and directs them accordingly."""
     user_id = get_user_id(update)
+    
+    # Send testing notice first (only for new sessions)
+    if not context.user_data.get('testing_notice_shown'):
+        testing_notice = """
+🚧 *Beta Testing Notification* 🚧
+
+Thank you for helping us improve! Please be advised:
+
+🔹 *Current Status*: 
+This bot is in active development - core functions are operational but some features remain incomplete.
+
+🔹 *What to Expect*:
+• Non-functional buttons/options (marked as "This feature is not yet completed")
+• Placeholder content in job posts and profiles
+• Occasional error messages
+• UI elements under refinement
+
+🔹 *When Stuck*:
+If the bot stops responding, type /start to reset your session.
+
+🔹 *Reporting Issues*:
+Your feedback is crucial! Please report any:
+- Frozen screens
+- Missing functionality 
+- Unclear instructions
+Via these channels:
+📝 'Rate/Review' in main menu
+🛟 'Help/Support' section
+📩 Direct message to admin team
+
+We're working around the clock to resolve these issues. Your patience and testing contributions are greatly appreciated!
+"""
+        await update.message.reply_text(testing_notice, parse_mode="Markdown")
+        context.user_data['testing_notice_shown'] = True
     user_profile = db.get_user_profile(user_id)
 
     # Check bans first
@@ -263,38 +297,6 @@ def escape_html(text):
 async def show_language_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = get_user_id(update)
     
-    # Enhanced testing stage notification
-    testing_notice = """
-🚧 *Beta Testing Notification* 🚧
-
-Thank you for helping us improve! Please be advised:
-
-🔹 *Current Status*: 
-This bot is in active development - core functions are operational but some features remain incomplete.
-
-🔹 *What to Expect*:
-• Non-functional buttons/options (marked as "This feature is not yet completed")
-• Placeholder content in job posts and profiles
-• Occasional error messages
-• UI elements under refinement
-
-🔹 *When Stuck*:
-If the bot stops responding, type /start to reset your session.
-
-🔹 *Reporting Issues*:
-Your feedback is crucial! Please report any:
-- Frozen screens
-- Missing functionality 
-- Unclear instructions
-Via these channels:
-📝 'Rate/Review' in main menu
-🛟 'Help/Support' section
-📩 Direct message to admin team
-
-We're working around the clock to resolve these issues. Your patience and testing contributions are greatly appreciated!
-"""
-    
-    await update.message.reply_text(testing_notice, parse_mode="Markdown")
     
     # Language selection keyboard
     keyboard = [
