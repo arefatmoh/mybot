@@ -34,10 +34,16 @@ import sqlite3
 
 
 class Database:
-    def __init__(self, db_path=os.path.join(os.path.dirname(__file__), "../db/database.db")):
-        db_path = os.path.abspath(db_path)
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)  # Ensure directory exists
-        self.connection = sqlite3.connect(db_path)
+    def __init__(self, db_path=None):
+        if db_path is None:
+            db_path = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)),  # Go up two levels
+                "db", 
+                "database.db"
+            )
+        self.db_path = os.path.abspath(db_path)
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        self.connection = sqlite3.connect(self.db_path)
 
         # rest of your code...
         self.connection.row_factory = sqlite3.Row
