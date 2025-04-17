@@ -34,32 +34,9 @@ import sqlite3
 
 
 class Database:
-    def __init__(self, db_path=None):
-        if db_path is None:
-            # Get absolute path to the database file
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            db_path = os.path.join(base_dir, "db", "database.db")
-
-        # Debugging: Print the resolved path
-        print(f"[DEBUG] Database path resolved to: {db_path}")
-        print(f"[DEBUG] Absolute path: {os.path.abspath(db_path)}")
-        print(f"[DEBUG] Directory exists: {os.path.exists(os.path.dirname(db_path))}")
-
-        # Ensure directory exists
-        try:
-            os.makedirs(os.path.dirname(db_path), exist_ok=True)
-            print(f"[DEBUG] Successfully ensured directory exists")
-        except Exception as e:
-            print(f"[ERROR] Failed to create directory: {e}")
-            raise
-
-        try:
-            self.connection = sqlite3.connect(db_path)
-            print("[DEBUG] Successfully connected to database")
-        except sqlite3.Error as e:
-            print(f"[ERROR] Failed to connect to database: {e}")
-            print("[DEBUG] Current working directory:", os.getcwd())
-            raise
+    def __init__(self, db_path="/home/ubuntu/mybot/db/database.db"):
+        # Use absolute path instead of relative
+        self.connection = sqlite3.connect(db_path)
 
         # rest of your code...
         self.connection.row_factory = sqlite3.Row
