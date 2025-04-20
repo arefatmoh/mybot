@@ -23,14 +23,26 @@ from telegram.ext import (
     ConversationHandler,
     ContextTypes,
 )
-from db.database import Database
+from ..db.database import Database
 from utils.validation import validate_job_post_data
 from utils.validation import validate_job_post
 from utils.validation import validate_job_post_data_for_job_preview
 
+
+
+# Get the absolute path to translations.json
+current_dir = os.path.dirname(os.path.abspath(__file__))
+translations_path = os.path.join(current_dir, "translations.json")
+
 # Load translations
-with open("translations.json", "r", encoding="utf-8") as file:
-    translations = json.load(file)
+try:
+    with open(translations_path, "r", encoding="utf-8") as file:
+        translations = json.load(file)
+except FileNotFoundError:
+    print(f"Error: translations.json not found at {translations_path}")
+    print("Current working directory:", os.getcwd())
+    print("Directory contents:", os.listdir('.'))
+    raise
 
 # Initialize Database
 db = Database()
@@ -99,8 +111,42 @@ def is_profile_complete(user_profile, db):
 
 #before
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Handles the bot startup. Checks user registration and directs them accordingly."""
+    """Handles the bot startup with testing notification, checks user registration and directs them accordingly."""
     user_id = get_user_id(update)
+    
+    # Send testing notice first (only for new sessions)
+    if not context.user_data.get('testing_notice_shown'):
+        testing_notice = """
+🚧 *Beta Testing Notification* 🚧
+
+Thank you for helping us improve! Please be advised:
+
+🔹 *Current Status*: 
+This bot is in active development - core functions are operational but some features remain incomplete.
+
+🔹 *What to Expect*:
+• Non-functional buttons/options (marked as "This feature is not yet completed")
+• Placeholder content in job posts and profiles
+• Occasional error messages
+• UI elements under refinement
+
+🔹 *When Stuck*:
+If the bot stops responding, type /start to reset your session.
+
+🔹 *Reporting Issues*:
+Your feedback is crucial! Please report any:
+- Frozen screens
+- Missing functionality 
+- Unclear instructions
+Via these channels:
+📝 'Rate/Review' in main menu
+🛟 'Help/Support' section
+📩 Direct message to admin team
+
+We're working around the clock to resolve these issues. Your patience and testing contributions are greatly appreciated!
+"""
+        await update.message.reply_text(testing_notice, parse_mode="Markdown")
+        context.user_data['testing_notice_shown'] = True
     user_profile = db.get_user_profile(user_id)
 
     # Check bans first
@@ -250,15 +296,19 @@ def escape_html(text):
 
 async def show_language_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = get_user_id(update)
+    
+    
+    # Language selection keyboard
     keyboard = [
-        [InlineKeyboardButton("English ", callback_data="english")],
-        [InlineKeyboardButton("አማርኛ ", callback_data="amharic")],
-        [InlineKeyboardButton("Afaan Oromoo ", callback_data="oromia")],
-        [InlineKeyboardButton("ትግርኛ ", callback_data="tigrigna")],
-        [InlineKeyboardButton("Qafar af ", callback_data="afar")],
+        [InlineKeyboardButton("English", callback_data="english")],
+        [InlineKeyboardButton("አማርኛ", callback_data="amharic")],
+        [InlineKeyboardButton("Afaan Oromoo", callback_data="oromia")],
+        [InlineKeyboardButton("ትግርኛ", callback_data="tigrigna")],
+        [InlineKeyboardButton("Qafar af", callback_data="afar")],
         [InlineKeyboardButton("Soomaali", callback_data="somalia")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
+    
     await update.message.reply_text(
         get_translation(user_id, "select_language"),
         reply_markup=reply_markup
