@@ -368,6 +368,7 @@ class Database:
                  comment TEXT,
                 is_anonymous BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                dimension_ratings TEXT,
                 FOREIGN KEY (reviewer_id) REFERENCES users(user_id)
             )
         """)
