@@ -369,6 +369,7 @@ class Database:
                 is_anonymous BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 dimension_ratings TEXT,
+                updated_at TIMESTAMP,
                 FOREIGN KEY (reviewer_id) REFERENCES users(user_id)
             )
         """)
