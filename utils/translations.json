@@ -794,7 +794,25 @@
     "admin_reply_cancelled": "Reply cancelled. No message was sent.",
     "category": "Category",
     "your_job_approved": "✅ Your job post has been approved!\n\n📌 Title: {job_title}\n🆔 Job ID: {job_id}\n\nThank you for using our platform. Candidates can now view and apply for your job opening.",
-  "your_job_rejected": "❌ Your job post has been rejected.\n\n📌 Title: {job_title}\n🆔 Job ID: {job_id}\n📝 Reason: {reason}\n\nPlease review and submit a new post if needed."
+  "your_job_rejected": "❌ Your job post has been rejected.\n\n📌 Title: {job_title}\n🆔 Job ID: {job_id}\n📝 Reason: {reason}\n\nPlease review and submit a new post if needed.",
+    "........": ".......",
+    "applicant_name": "Applicant Name",
+  "ask_rejection_reason": "Please provide the reason for rejecting this job post:",
+  "cannot_close_non_approved_vacancy": "You cannot close a vacancy that hasn't been approved.",
+  "error_fetching_job": "An error occurred while fetching the job details. Please try again later.",
+  "error_validating_job": "Error validating job post {job_id}: {error}",
+  "invalid_cgpa": "Please enter a valid CGPA between 0 and 4.",
+  "invalid_field_of_study": "Please enter a valid field of study (minimum 3 characters).",
+  "invalid_portfolio_link": "Please enter a valid portfolio link or website URL.",
+  "invalid_profile_summary": "Please provide a meaningful profile summary (minimum 10 characters).",
+  "invalid_quantity_positive": "Please enter a valid positive number.",
+  "job_not_open": "Job #{job_id} is not currently open for applications.",
+  "job_post_saved_successfully": "Job post saved successfully!",
+  "missing_job_post_data": "Missing job post data. Please start the job posting process again.",
+  "no_approved_jobs_found": "No approved jobs found for your account.",
+  "registration_failed": "Registration failed. Please try again or contact support.",
+  "select_action_for_job": "Please select an action for this job:",
+  "unique_number": "Unique Number"
   },
 
 
