@@ -4338,30 +4338,38 @@ async def show_profile_completion_details(update: Update, context: ContextTypes.
         else:
             missing_fields.append(field)
 
-    # Create detailed message
-    message = (
-        f"📊 <b>{get_translation(user_id, 'profile_completion_details')}</b>\n\n"
-        f"{generate_profile_strength_bar(completion)}\n"
+    # Create message parts
+    message_parts = [
+        f"📊 <b>{get_translation(user_id, 'profile_completion_details')}</b>\n\n",
+        f"{generate_profile_strength_bar(completion)}\n",
         f"<b>{completion}%</b> {get_completion_message(completion, user_id)}\n\n"
-    )
+    ]
 
+    # Helper function to format field entries
+    def format_field_entry(field):
+        emoji = EMPLOYER_EDITABLE_FIELDS[field].get("emoji", "")
+        field_name = get_translation(user_id, "edit_" + field)
+        return f"▸ {emoji} {field_name}\n"
+
+    # Add completed fields if any
     if completed_fields:
-        message += (
-            f"✅ <b>{get_translation(user_id, 'completed_sections')}:</b>\n"
-            f"{''.join([f'▸ {EMPLOYER_EDITABLE_FIELDS[f]["emoji"]} {get_translation(user_id, f"edit_{f}")}\n' for f in completed_fields])}\n"
-        )
+        message_parts.append(f"✅ <b>{get_translation(user_id, 'completed_sections')}:</b>\n")
+        message_parts.extend(format_field_entry(field) for field in completed_fields)
+        message_parts.append("\n")
 
+    # Add missing fields if any
     if missing_fields:
-        message += (
-            f"⚠️ <b>{get_translation(user_id, 'missing_sections')}:</b>\n"
-            f"{''.join([f'▸ {EMPLOYER_EDITABLE_FIELDS[f]["emoji"]} {get_translation(user_id, f"edit_{f}")}\n' for f in missing_fields])}\n\n"
-            f"💡 <i>{get_translation(user_id, 'completion_tip')}</i>"
-        )
+        message_parts.append(f"⚠️ <b>{get_translation(user_id, 'missing_sections')}:</b>\n")
+        message_parts.extend(format_field_entry(field) for field in missing_fields)
+        message_parts.append(f"\n💡 <i>{get_translation(user_id, 'completion_tip')}</i>")
+
+    # Combine all parts
+    message = "".join(message_parts)
 
     # Add back button
     keyboard = [
         [InlineKeyboardButton(
-            f"🔙 {get_translation(user_id, 'back_to_editing')}",
+            get_translation(user_id, "back_to_editing"),
             callback_data="back_to_editing"
         )]
     ]
@@ -4374,7 +4382,6 @@ async def show_profile_completion_details(update: Update, context: ContextTypes.
     )
 
     return PROFILE_COMPLETION_VIEW
-
 
 async def cancel_editing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle cancellation of editing process"""
