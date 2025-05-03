@@ -5258,7 +5258,7 @@ def format_job_post(user_id, job, bot_username, for_sharing=False):
         get_translation(user_id, "share_variation_7"),
         get_translation(user_id, "share_variation_8"),
         get_translation(user_id, "share_variation_9"),
-        get_translation(user_id, "share_variation_9")
+        get_translation(user_id, "share_variation_10")  # Fixed duplicate
     ]
 
     opportunity_messages = [
@@ -5281,50 +5281,61 @@ def format_job_post(user_id, job, bot_username, for_sharing=False):
     banner_emojis = ["✨", "🌟", "⚡", "🔥", "💎", "🚀", "💼", "👔", "🎯", "🏆"]
     banner = "".join(random.choices(banner_emojis, k=11))
 
-    # Header with job title
-    job_details = (
-        f"<b>╔══════════════════════════╗</b>\n\n"
+    # Format each section separately
+    header = (
+        "<b>╔════════════════════════╗</b>\n\n"
         f"<b>🌟 {get_translation(user_id, 'job_title')}:</b> <u>{escape_html(job['job_title'])}</u>\n"
-        f"<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
+        "<b>━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
+    )
 
-        # Company and basic info section
+    company_info = (
         f"<b>🏛️ {get_translation(user_id, 'employer')}:</b> <code>{escape_html(job.get('company_name', 'Not provided'))}</code>\n"
         f"<b>📌 {get_translation(user_id, 'employment_type')}:</b> <code>{escape_html(job['employment_type'])}</code>\n"
         f"<b>👤 {get_translation(user_id, 'gender')}:</b> <code>{escape_html(job['gender'])}</code>"
         f"  •  <b>👥 {get_translation(user_id, 'quantity')}:</b> <code>{job['quantity']}</code>\n"
         f"<b>📈 {get_translation(user_id, 'level')}:</b> <code>{escape_html(job['level'])}</code>\n\n"
+    )
 
-        # Description with special formatting
+    description = (
         f"<b>📜 {get_translation(user_id, 'description')}:</b>\n"
         f"<i>✨ {escape_html(job['description'])}</i>\n\n"
-        f"<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
+        "<b>━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
+    )
 
-        # Requirements section with bullet points
+    requirements = (
         f"<b>🎯 {get_translation(user_id, 'qualification')}:</b>\n"
         f"<blockquote>  ✦ {escape_html(job['qualification']).replace('\n', '\n  ✦ ')}</blockquote>\n\n"
-
         f"<b>🛠️ {get_translation(user_id, 'skills')}:</b>\n"
         f"<blockquote>  ✔️ {escape_html(job['skills']).replace('\n', '\n  ✔️ ')}</blockquote>\n\n"
-        f"<b>━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
+        "<b>━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
+    )
 
-        # Salary and benefits with highlight
+    salary_benefits = (
         f"<b>💰 {get_translation(user_id, 'salary')}:</b> <code>{job['salary']}</code>\n\n"
         f"<b>🎁 {get_translation(user_id, 'benefits')}:</b>\n"
         f"<blockquote> ✔️ {escape_html(job['benefits']).replace('\n', '\n ✔️ ')}</blockquote>\n\n"
-        f"<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
+        "<b>━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
+    )
 
-        # Urgency and CTA section
+    urgency_cta = (
         f"<b>⏳ {get_translation(user_id, 'deadline')}:</b> <code>{escape_html(job['deadline'])}</code>\n"
         f"<b>🟢 {get_translation(user_id, 'status')}:</b> <code>{escape_html(job['status'].capitalize())}</code>\n\n"
-
-        # Prominent CTA button
         f"<b>{opportunity_text}</b>\n"
         f"👉 <a href='https://t.me/{bot_username}?start=apply_{job['job_id']}'><b>[🚀 Apply Now]</b></a> 👈\n\n"
+    )
 
-        # Footer
+    footer = (
         f"<i>{share_text}</i>\n"
-        f"<b>╚══════════════════════════╝</b>\n\n"
-        f"<b><i>{get_translation(user_id, 'posted_via_brand').format(bot_username=bot_username)}</i></b>"
+        "<b>╚════════════════════════╝</b>\n\n"
+        "<b><i>{}</i></b>".format(
+            get_translation(user_id, 'posted_via_brand').format(bot_username=bot_username)
+        )
+    )
+
+    # Combine all sections
+    job_details = (
+        header + company_info + description
+        + requirements + salary_benefits + urgency_cta + footer
     )
 
     return job_details
