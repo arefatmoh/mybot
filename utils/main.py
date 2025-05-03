@@ -2551,25 +2551,38 @@ async def show_profile_completion_details_js(update: Update, context: ContextTyp
         else:
             missing_fields.append(field)
 
-    # Create detailed message
-    message = (
-        f"📊 <b>{get_translation(user_id, 'profile_completion_details')}</b>\n\n"
-        f"{generate_profile_strength_bar(completion)}\n"
+    # Helper function to format field entries
+    def format_field_entries(fields):
+        entries = []
+        for field in fields:
+            emoji = JOB_SEEKER_EDITABLE_FIELDS[field]["emoji"]
+            translation = get_translation(user_id, "edit_{}".format(field))
+            entries.append(f"▸ {emoji} {translation}\n")
+        return "".join(entries)
+
+    # Build message parts
+    message_parts = [
+        f"📊 <b>{get_translation(user_id, 'profile_completion_details')}</b>\n\n",
+        f"{generate_profile_strength_bar(completion)}\n",
         f"<b>{completion}%</b> {get_completion_message(completion, user_id)}\n\n"
-    )
+    ]
 
     if completed_fields:
-        message += (
-            f"✅ <b>{get_translation(user_id, 'completed_sections')}:</b>\n"
-            f"{''.join([f'▸ {JOB_SEEKER_EDITABLE_FIELDS[f]["emoji"]} {get_translation(user_id, f"edit_{f}")}\n' for f in completed_fields])}\n"
-        )
+        message_parts.extend([
+            f"✅ <b>{get_translation(user_id, 'completed_sections')}:</b>\n",
+            format_field_entries(completed_fields),
+            "\n"
+        ])
 
     if missing_fields:
-        message += (
-            f"⚠️ <b>{get_translation(user_id, 'missing_sections')}:</b>\n"
-            f"{''.join([f'▸ {JOB_SEEKER_EDITABLE_FIELDS[f]["emoji"]} {get_translation(user_id, f"edit_{f}")}\n' for f in missing_fields])}\n\n"
-            f"💡 <i>{get_translation(user_id, 'completion_tip')}</i>"
-        )
+        message_parts.extend([
+            f"⚠️ <b>{get_translation(user_id, 'missing_sections')}:</b>\n",
+            format_field_entries(missing_fields),
+            f"\n💡 <i>{get_translation(user_id, 'completion_tip')}</i>"
+        ])
+
+    # Combine all parts
+    message = "".join(message_parts)
 
     # Add back button
     keyboard = [
@@ -2587,7 +2600,6 @@ async def show_profile_completion_details_js(update: Update, context: ContextTyp
     )
 
     return PROFILE_COMPLETION
-
 
 async def handle_document_upload(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.message.from_user.id
