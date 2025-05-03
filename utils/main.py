@@ -5315,17 +5315,30 @@ def format_job_post(user_id, job, bot_username, for_sharing=False):
     )
 
     salary_benefits = (
-        f"<b>💰 {get_translation(user_id, 'salary')}:</b> <code>{job['salary']}</code>\n\n"
-        f"<b>🎁 {get_translation(user_id, 'benefits')}:</b>\n"
-        f"<blockquote> ✔️ {escape_html(job['benefits']).replace('\n', '\n ✔️ ')}</blockquote>\n\n"
+        "<b>💰 {}:</b> <code>{}</code>\n\n"
+        "<b>🎁 {}:</b>\n"
+        "<blockquote> ✔️ {}</blockquote>\n\n"
         "<b>━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
+    ).format(
+        get_translation(user_id, 'salary'),
+        job['salary'],
+        get_translation(user_id, 'benefits'),
+        escape_html(job['benefits']).replace('\n', '\n ✔️ ')
     )
 
     urgency_cta = (
-        f"<b>⏳ {get_translation(user_id, 'deadline')}:</b> <code>{escape_html(job['deadline'])}</code>\n"
-        f"<b>🟢 {get_translation(user_id, 'status')}:</b> <code>{escape_html(job['status'].capitalize())}</code>\n\n"
-        f"<b>{opportunity_text}</b>\n"
-        f"👉 <a href='https://t.me/{bot_username}?start=apply_{job['job_id']}'><b>[🚀 Apply Now]</b></a> 👈\n\n"
+        "<b>⏳ {}:</b> <code>{}</code>\n"
+        "<b>🟢 {}:</b> <code>{}</code>\n\n"
+        "<b>{}</b>\n"
+        "👉 <a href='https://t.me/{}?start=apply_{}'><b>[🚀 Apply Now]</b></a> 👈\n\n"
+    ).format(
+        get_translation(user_id, 'deadline'),
+        escape_html(job['deadline']),
+        get_translation(user_id, 'status'),
+        escape_html(job['status'].capitalize()),
+        opportunity_text,
+        bot_username,
+        job['job_id']
     )
 
     footer = (
