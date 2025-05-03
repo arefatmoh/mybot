@@ -2348,22 +2348,31 @@ async def show_profile_completion(update: Update, context: ContextTypes.DEFAULT_
             missing_fields.append(field)
 
     # Create detailed message
-    message = (
-        f"📊 <b>{get_translation(user_id, 'profile_completion_details')}</b>\n\n"
-        f"{generate_profile_strength_bar(completion)}\n"
+    message_parts = [
+        f"📊 <b>{get_translation(user_id, 'profile_completion_details')}</b>\n\n",
+        f"{generate_profile_strength_bar(completion)}\n",
         f"<b>{completion}%</b> {get_completion_message(completion, user_id)}\n\n"
-    )
-    #fixed
+    ]
+
     if completed_fields:
         completed_list = [f'▸ {get_translation(user_id, f"edit_{f}")}\n' for f in completed_fields]
-        message += f"✅ <b>{get_translation(user_id, 'completed_sections')}:</b>\n{''.join(completed_list)}\n"
+        message_parts.append(f"✅ <b>{get_translation(user_id, 'completed_sections')}:</b>\n{''.join(completed_list)}\n")
 
     if missing_fields:
-        message += (
-            f"⚠️ <b>{get_translation(user_id, 'missing_sections')}:</b>\n"
-            f"{''.join([f'▸ {get_translation(user_id, f'edit_{f}')}\n' for f in missing_fields])}\n\n"
-            f"💡 <i>{get_translation(user_id, 'completion_tip')}</i>"
-        )
+        missing_list = []
+        for f in missing_fields:
+            field_name = get_translation(user_id, f"edit_{f}")
+            missing_list.append(f'▸ {field_name}\n')
+
+        message_parts.extend([
+            f"⚠️ <b>{get_translation(user_id, 'missing_sections')}:</b>\n",
+            ''.join(missing_list),
+            f"\n💡 <i>{get_translation(user_id, 'completion_tip')}</i>"
+        ])
+
+    # Combine all message parts
+    message = ''.join(message_parts)
+
     # Add back button
     keyboard = [
         [InlineKeyboardButton(
