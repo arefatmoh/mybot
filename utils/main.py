@@ -25,7 +25,7 @@ from telegram.ext import (
     ConversationHandler,
     ContextTypes,
 )
-from ..db.database import Database
+from db.database import Database
 from utils.validation import validate_job_post_data
 from utils.validation import validate_job_post
 from utils.validation import validate_job_post_data_for_job_preview
