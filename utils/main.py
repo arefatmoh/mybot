@@ -2358,15 +2358,12 @@ async def show_profile_completion(update: Update, context: ContextTypes.DEFAULT_
         completed_list = [f'▸ {get_translation(user_id, f"edit_{f}")}\n' for f in completed_fields]
         message += f"✅ <b>{get_translation(user_id, 'completed_sections')}:</b>\n{''.join(completed_list)}\n"
 
-
-
     if missing_fields:
         message += (
             f"⚠️ <b>{get_translation(user_id, 'missing_sections')}:</b>\n"
-            f"{''.join([f'▸ {get_translation(user_id, f"edit_{f}")}\n' for f in missing_fields])}\n\n"
+            f"{''.join([f'▸ {get_translation(user_id, f'edit_{f}')}\n' for f in missing_fields])}\n\n"
             f"💡 <i>{get_translation(user_id, 'completion_tip')}</i>"
         )
-
     # Add back button
     keyboard = [
         [InlineKeyboardButton(
