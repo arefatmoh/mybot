@@ -24,11 +24,10 @@ import sqlite3
 class Database:
     def __init__(self, db_path=None):
         if db_path is None:
-            db_path = os.path.join(
-                os.path.dirname(os.path.dirname(__file__)),  # Go up two levels
-                "db", 
-                "database.db"
-            )
+            # Get path relative to this file
+            db_dir = os.path.join(os.path.dirname(__file__), '..')
+            db_path = os.path.join(db_dir, 'database.db')
+
         self.db_path = os.path.abspath(db_path)
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         self.connection = sqlite3.connect(self.db_path)

@@ -1,6 +1,7 @@
 import asyncio
 import io
 import json
+import sys
 import tempfile
 from urllib.parse import urlparse
 from typing import Optional
@@ -25,7 +26,14 @@ from telegram.ext import (
     ConversationHandler,
     ContextTypes,
 )
-from mybot.db.database import Database
+from pathlib import Path
+
+# Add the project root to Python path
+project_root = Path(__file__).resolve().parent.parent
+sys.path.append(str(project_root))
+
+# Now import your Database class
+from db.database import Database
 from utils.validation import validate_job_post_data
 from utils.validation import validate_job_post
 from utils.validation import validate_job_post_data_for_job_preview
