@@ -5283,8 +5283,7 @@ def format_job_post(user_id, job, bot_username, for_sharing=False):
 
     # Header with job title
     job_details = (
-         f"<b>╔══════════════════════════╗</b>\n\n"
-
+        f"<b>╔══════════════════════════╗</b>\n\n"
         f"<b>🌟 {get_translation(user_id, 'job_title')}:</b> <u>{escape_html(job['job_title'])}</u>\n"
         f"<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
 
@@ -5301,12 +5300,12 @@ def format_job_post(user_id, job, bot_username, for_sharing=False):
         f"<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
 
         # Requirements section with bullet points
-       f"<b>🎯 {get_translation(user_id, 'qualification')}:</b>\n"
+        f"<b>🎯 {get_translation(user_id, 'qualification')}:</b>\n"
         f"<blockquote>  ✦ {escape_html(job['qualification']).replace('\n', '\n  ✦ ')}</blockquote>\n\n"
 
         f"<b>🛠️ {get_translation(user_id, 'skills')}:</b>\n"
         f"<blockquote>  ✔️ {escape_html(job['skills']).replace('\n', '\n  ✔️ ')}</blockquote>\n\n"
-        f"<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
+        f"<b>━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
 
         # Salary and benefits with highlight
         f"<b>💰 {get_translation(user_id, 'salary')}:</b> <code>{job['salary']}</code>\n\n"
@@ -5321,16 +5320,14 @@ def format_job_post(user_id, job, bot_username, for_sharing=False):
         # Prominent CTA button
         f"<b>{opportunity_text}</b>\n"
         f"👉 <a href='https://t.me/{bot_username}?start=apply_{job['job_id']}'><b>[🚀 Apply Now]</b></a> 👈\n\n"
-     
 
         # Footer
-         f"<i>{share_text}</i>\n"
+        f"<i>{share_text}</i>\n"
         f"<b>╚══════════════════════════╝</b>\n\n"
         f"<b><i>{get_translation(user_id, 'posted_via_brand').format(bot_username=bot_username)}</i></b>"
     )
 
     return job_details
-
 
 
 def escape_html(text):
