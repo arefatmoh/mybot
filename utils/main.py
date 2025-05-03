@@ -2354,8 +2354,14 @@ async def show_profile_completion(update: Update, context: ContextTypes.DEFAULT_
         f"<b>{completion}%</b> {get_completion_message(completion, user_id)}\n\n"
     )
 
-    completed_list = [f'▸ {get_translation(user_id, f"edit_{f}")}\n' for f in completed_fields]
-message += f"✅ <b>{get_translation(user_id, 'completed_sections')}:</b>\n{''.join(completed_list)}\n"
+    if completed_fields:
+        completed_lines = ''.join([f"▸ {get_translation(user_id, 'edit_' + f)}\n" for f in completed_fields])
+        message += (
+            f"✅ <b>{get_translation(user_id, 'completed_sections')}:</b>\n"
+            f"{completed_lines}\n"
+        )
+
+
 
     if missing_fields:
         message += (
