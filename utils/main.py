@@ -2353,7 +2353,7 @@ async def show_profile_completion(update: Update, context: ContextTypes.DEFAULT_
         f"{generate_profile_strength_bar(completion)}\n"
         f"<b>{completion}%</b> {get_completion_message(completion, user_id)}\n\n"
     )
-
+    #fixed
     if completed_fields:
         completed_list = [f'▸ {get_translation(user_id, f"edit_{f}")}\n' for f in completed_fields]
         message += f"✅ <b>{get_translation(user_id, 'completed_sections')}:</b>\n{''.join(completed_list)}\n"
