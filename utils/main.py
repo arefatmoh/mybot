@@ -14392,57 +14392,60 @@ start_time = datetime.now()
 
 async def generate_stats_message(stats: dict) -> str:
     """Generate formatted stats message from statistics dictionary."""
+
     def format_growth(value):
         value = float(value or 0)
         if value > 0:
-            return f"📈 \\+{escape_markdown(value)}%"
+            return f"📈 +{escape_markdown(value)}%"
         elif value < 0:
             return f"📉 {escape_markdown(value)}%"
         else:
             return "➖ 0%"
 
-    return f"""
-📊 *Database Statistics Dashboard* 📊
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-🚀 *Quick Summary*
-├ 👥 Users\\: `{escape_markdown(stats['total_users'])}` \\({format_growth(stats['user_growth_week'])}\\)
-├ 💼 Vacancies\\: `{escape_markdown(stats['active_jobs'])}` active / `{escape_markdown(stats['completed_jobs'])}` done
-├ 📨 Apps\\: `{escape_markdown(stats['total_applications'])}` \\(Pending\\: `{escape_markdown(stats['pending_applications'])}`\\)
-└ ⚠️ Errors\\: `{escape_markdown(stats['error_rate'])}%`
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-👥 *USERS*
-├ Total\\: `{escape_markdown(stats['total_users'])}`
-├ Active\\: `{escape_markdown(stats['active_users'])}`
-├ Inactive\\: `{escape_markdown(stats['inactive_users'])}`
-├ New \\(7d\\)\\: `{escape_markdown(stats['new_users_last_7_days'])}` \\({format_growth(stats['user_growth_week'])}\\) 
-└ New \\(30d\\)\\: `{escape_markdown(stats['new_users_last_30_days'])}` \\({format_growth(stats['user_growth_month'])}\\)
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-💼 *Vacancies*
-├ Total\\: `{escape_markdown(stats['total_jobs'])}`
-├ Active\\: `{escape_markdown(stats['active_jobs'])}`
-├ Rejected\\: `{escape_markdown(stats['rejected_jobs'])}`
-└ Completed\\: `{escape_markdown(stats['completed_jobs'])}`
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-📨 *APPLICATIONS*
-├ Total\\: `{escape_markdown(stats['total_applications'])}`
-├ Avg/Job\\: `{escape_markdown(stats['average_applications_per_job'])}`
-├ Pending\\: `{escape_markdown(stats['pending_applications'])}`
-├ Approved\\: `{escape_markdown(stats['approved_applications'])}`
-└ Rejected\\: `{escape_markdown(stats['rejected_applications'])}`
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-📈 *TRENDS*
-└ Signup Rate\\: `{escape_markdown(stats['user_signup_rate'])}%`
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚙️ *SYSTEM*
-├ DB Size\\: `{escape_markdown(stats['db_size'])}`
-├ Error Rate\\: `{escape_markdown(stats['error_rate'])}%`
-├ CPU Usage\\: `{escape_markdown(str(stats['cpu_usage']))}%`
-├ Memory Usage\\: `{escape_markdown(str(stats['memory_usage']))}%`
-└ Bot Uptime\\: `{escape_markdown(stats['bot_uptime'])}`
+    # Pre-format the date to avoid backslashes in f-string
+    last_updated = escape_markdown(datetime.now().strftime('%Y-%m-%d %H:%M'))
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔄 *Last Updated*\\: `{escape_markdown(datetime.now().strftime('%Y\\-%m\\-%d %H\\:%M'))}`
-"""
+    return (
+        "📊 *Database Statistics Dashboard* 📊\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "🚀 *Quick Summary*\n"
+        f"├ 👥 Users: `{escape_markdown(stats['total_users'])}` ({format_growth(stats['user_growth_week'])})\n"
+        f"├ 💼 Vacancies: `{escape_markdown(stats['active_jobs'])}` active / `{escape_markdown(stats['completed_jobs'])}` done\n"
+        f"├ 📨 Apps: `{escape_markdown(stats['total_applications'])}` (Pending: `{escape_markdown(stats['pending_applications'])}`)\n"
+        f"└ ⚠️ Errors: `{escape_markdown(stats['error_rate'])}%`\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "👥 *USERS*\n"
+        f"├ Total: `{escape_markdown(stats['total_users'])}`\n"
+        f"├ Active: `{escape_markdown(stats['active_users'])}`\n"
+        f"├ Inactive: `{escape_markdown(stats['inactive_users'])}`\n"
+        f"├ New (7d): `{escape_markdown(stats['new_users_last_7_days'])}` ({format_growth(stats['user_growth_week'])})\n"
+        f"└ New (30d): `{escape_markdown(stats['new_users_last_30_days'])}` ({format_growth(stats['user_growth_month'])})\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "💼 *Vacancies*\n"
+        f"├ Total: `{escape_markdown(stats['total_jobs'])}`\n"
+        f"├ Active: `{escape_markdown(stats['active_jobs'])}`\n"
+        f"├ Rejected: `{escape_markdown(stats['rejected_jobs'])}`\n"
+        f"└ Completed: `{escape_markdown(stats['completed_jobs'])}`\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "📨 *APPLICATIONS*\n"
+        f"├ Total: `{escape_markdown(stats['total_applications'])}`\n"
+        f"├ Avg/Job: `{escape_markdown(stats['average_applications_per_job'])}`\n"
+        f"├ Pending: `{escape_markdown(stats['pending_applications'])}`\n"
+        f"├ Approved: `{escape_markdown(stats['approved_applications'])}`\n"
+        f"└ Rejected: `{escape_markdown(stats['rejected_applications'])}`\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "📈 *TRENDS*\n"
+        f"└ Signup Rate: `{escape_markdown(stats['user_signup_rate'])}%`\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "⚙️ *SYSTEM*\n"
+        f"├ DB Size: `{escape_markdown(stats['db_size'])}`\n"
+        f"├ Error Rate: `{escape_markdown(stats['error_rate'])}%`\n"
+        f"├ CPU Usage: `{escape_markdown(str(stats['cpu_usage']))}%`\n"
+        f"├ Memory Usage: `{escape_markdown(str(stats['memory_usage']))}%`\n"
+        f"└ Bot Uptime: `{escape_markdown(stats['bot_uptime'])}`\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🔄 *Last Updated*: `{last_updated}`\n"
+    )
 
 async def db_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
