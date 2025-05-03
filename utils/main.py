@@ -5303,11 +5303,15 @@ def format_job_post(user_id, job, bot_username, for_sharing=False):
     )
 
     requirements = (
-        f"<b>🎯 {get_translation(user_id, 'qualification')}:</b>\n"
-        f"<blockquote>  ✦ {escape_html(job['qualification']).replace('\n', '\n  ✦ ')}</blockquote>\n\n"
-        f"<b>🛠️ {get_translation(user_id, 'skills')}:</b>\n"
-        f"<blockquote>  ✔️ {escape_html(job['skills']).replace('\n', '\n  ✔️ ')}</blockquote>\n\n"
-        "<b>━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
+            f"<b>🎯 {get_translation(user_id, 'qualification')}:</b>\n"
+            "<blockquote>  ✦ {}</blockquote>\n\n".format(
+                escape_html(job['qualification']).replace('\n', '\n  ✦ ')
+            ) +
+            f"<b>🛠️ {get_translation(user_id, 'skills')}:</b>\n"
+            "<blockquote>  ✔️ {}</blockquote>\n\n".format(
+                escape_html(job['skills']).replace('\n', '\n  ✔️ ')
+            ) +
+             "<b>━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
     )
 
     salary_benefits = (
