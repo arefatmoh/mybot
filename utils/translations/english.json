@@ -1519,7 +1519,13 @@
       "registration_profile": "📝 Registration & Profile",
   "job_search_applications": "🔍 Job Search & Applications",
   "search_filters": "📂 Search & Filters",
-  "account_management": "🔒 Account Management"
+  "account_management": "🔒 Account Management",
+  "application_status_pending": "Pending",
+  "application_status_reviewed": "Reviewed",
+  "application_status_approved": "Approved",
+  "application_status_rejected": "Rejected",
+  "application_status_withdrawn": "Withdrawn"
+
 
 
 

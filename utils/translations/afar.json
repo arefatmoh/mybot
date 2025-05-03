@@ -1617,7 +1617,12 @@
   "job_search_applications": "🔍 Barbaadinta Shaqo & Codsiga",
   "search_filters": "📂 Barbaado & Filterta",
   "account_management": "🔒 Maareynta Akkaawnta",
-  "ban_appeal": "🚫 Mamnuuc & Dacwad"
+  "ban_appeal": "🚫 Mamnuuc & Dacwad",
+     "application_status_pending": "Sugumta",
+  "application_status_reviewed": "Eegamee arkamiye",
+  "application_status_approved": "Aqbaliye",
+  "application_status_rejected": "Diidiye",
+  "application_status_withdrawn": "Kaafe"
 
 
 

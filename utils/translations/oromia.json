@@ -1610,5 +1610,10 @@
      "registration_profile": "📝 Galmee fi Piroofaayilii",
   "job_search_applications": "🔍 Hojii Barbaadduu fi Gaaffii Hojii",
   "search_filters": "📂 Barbaacha fi Filannoo",
-  "account_management": "🔒 Bulchiinsa Akaawuntii"
+  "account_management": "🔒 Bulchiinsa Akaawuntii",
+     "application_status_pending": "Eeggachaa jiru",
+  "application_status_reviewed": "Ilaalameera",
+  "application_status_approved": "Mirkanaa’eera",
+  "application_status_rejected": "Dhabameera",
+  "application_status_withdrawn": "Dabarfameera"
  }

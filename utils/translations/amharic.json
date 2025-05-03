@@ -1523,5 +1523,10 @@
        "registration_profile": "📝 ምዝገባ እና መገለጫ",
     "job_search_applications": "🔍 የሥራ ፍለጋ እና ማመልከቻዎች",
     "search_filters": "📂 ፍለጋ እና ማጣሪያዎች",
-    "account_management": "🔒 የመለያ አስተዳደር"
+    "account_management": "🔒 የመለያ አስተዳደር",
+   "application_status_pending": "በሂደት ላይ",
+    "application_status_reviewed": "ተገምግሟል",
+    "application_status_approved": "ተቀባይነት አግኝቷል",
+    "application_status_rejected": "ውድቅ ተደርጓል",
+    "application_status_withdrawn": "ተቋርጧል"
  }

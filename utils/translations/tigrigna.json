@@ -1519,7 +1519,12 @@
    "registration_profile": "📝 መዝግዓን ፕሮፋይልን",
   "job_search_applications": "🔍 ፍለጣ ስራሕን መብጻእታትን",
   "search_filters": "📂 ፍለጣን ምርጫን",
-  "account_management": "🔒 ምምሕዳር ሒሳብ"
+  "account_management": "🔒 ምምሕዳር ሒሳብ",
+    "application_status_pending": "ተጸባዕቀ",
+  "application_status_reviewed": "ተመርመረ",
+  "application_status_approved": "ተፈቐደ",
+  "application_status_rejected": "ተሰደደ",
+  "application_status_withdrawn": "ተወግደ"
 }
 
 

@@ -2809,7 +2809,7 @@ async def show_application_details(update: Update, context: ContextTypes.DEFAULT
         f"📅 <b>{get_translation(user_id, 'applied_on')}:</b> {application['application_date']}\n"
         f"📌 <b>{get_translation(user_id, 'status')}:</b> {application['status'].capitalize()}\n\n"
         f"📝 <b>{get_translation(user_id, 'cover_letter')}:</b>\n{application['cover_letter'][:300]}...\n\n"
-        f"📋 <b>{get_translation(user_id, 'job_description')}:</b>\n{application['description'][:200]}..."
+        f"📋 <b>{get_translation(user_id, 'job_description')}:</b>\n{application['description'][:300]}..."
     )
 
     keyboard = [
@@ -20704,7 +20704,7 @@ async def advanced_error_handler(update: object, context: ContextTypes.DEFAULT_T
 
 
 async def notify_admins_about_error(context: ContextTypes.DEFAULT_TYPE, error_id: str, error_data: dict) -> None:
-    """Notify all admins about the error with action buttons"""
+    """Notify all admins about the error"""
     admin_ids = get_all_admins()
     if not admin_ids:
         return
@@ -20713,22 +20713,14 @@ async def notify_admins_about_error(context: ContextTypes.DEFAULT_TYPE, error_id
     error_message = str(error_data.get('error_message', 'Unknown error'))
     short_error = f"{error_data.get('error_type', 'Error')}: {error_message[:200]}"
 
-    keyboard = [
-        [InlineKeyboardButton("View Details", callback_data=f"view_error_{error_id}"),
-         InlineKeyboardButton("Mark as Fixed", callback_data=f"resolve_error_{error_id}")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
     for admin_id in admin_ids:
         try:
             await context.bot.send_message(
                 chat_id=admin_id,
-                text=f"🚨 New Bot Error ({error_id[:8]}):\n\n{short_error}",
-                reply_markup=reply_markup
+                text=f"🚨 New Bot Error ({error_id[:8]}):\n\n{short_error}"
             )
         except Exception as e:
             logging.error(f"Could not notify admin {admin_id} about error: {str(e)}")
-
 
 async def view_system_errors(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Show list of system errors"""

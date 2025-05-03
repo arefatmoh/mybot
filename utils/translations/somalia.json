@@ -1514,6 +1514,11 @@
      "registration_profile": "📝 Diiwaangelin & Profile",
     "job_search_applications": "🔍 Shaqo Raadis & Codsiyo",
     "search_filters": "📂 Baaris & Kala Saar",
-    "account_management": "🔒 Maamulka Koontada"
+    "account_management": "🔒 Maamulka Koontada",
+     "application_status_pending": "Sugayaal",
+    "application_status_reviewed": "Dib loo eegay",
+    "application_status_approved": "La oggolaaday",
+    "application_status_rejected": "La diiday",
+    "application_status_withdrawn": "Laga noqday"
  }
 

@@ -1312,6 +1312,7 @@ class Database:
             SELECT 
                 a.application_id,
                 v.job_title,
+                v.description,
                 u.full_name AS applicant_name,  
                 e.company_name,
                 a.application_date,
