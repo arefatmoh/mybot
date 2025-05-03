@@ -5,6 +5,8 @@ import random
 import sys
 import traceback
 
+import psutil
+
 from utils.validation import validate_job_post, validate_job_post_data
 from datetime import datetime, timedelta
 from datetime import date
@@ -15,20 +17,6 @@ from typing import Optional, List
 from uuid import uuid4
 from pydantic import BaseModel
 import logging
-
-# class BotError(BaseModel):
-#     error_id: str
-#     timestamp: datetime
-#     user_id: Optional[int]
-#     chat_id: Optional[int]
-#     command: Optional[str]
-#     error_type: str
-#     error_message: str
-#     traceback: str
-#     status: str = "unresolved"  # unresolved, investigating, fixed
-#     context_data: Optional[dict]
-#     update_data: Optional[dict]
-
 import os
 import sqlite3
 
@@ -187,10 +175,11 @@ class Database:
         self.cursor.execute("""
                     CREATE TABLE IF NOT EXISTS bans (
                         ban_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        user_id INTEGER NOT NULL,
+                        user_id INTEGER NULL,
                         employer_id INTEGER,
                         reason TEXT NOT NULL,
                         ban_date TEXT DEFAULT CURRENT_TIMESTAMP,
+                        banned_at TEXT DEFAULT (datetime('now')),
                         unban_date TEXT, -- Optional: For temporary bans with an expiration date
                         FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
                     )
@@ -257,6 +246,20 @@ class Database:
                    FOREIGN KEY (user_id) REFERENCES users(user_id)
                )
            """)
+
+        # report
+        self.cursor.execute("""
+                               CREATE TABLE IF NOT EXISTS reports (
+                                report_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                reporter_id INTEGER NOT NULL,
+                                reported_entity_type TEXT NOT NULL, -- 'job_seeker', 'employer', 'application', 'vacancy'
+                                reported_entity_id INTEGER NOT NULL,
+                                reason TEXT NOT NULL,
+                                additional_info TEXT,
+                                report_status TEXT DEFAULT 'pending', -- 'pending', 'resolved', 'dismissed'
+                                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                               )
+                           """)
 
         # Review Metadata (for analytics)
         self.cursor.execute("""
@@ -447,6 +450,9 @@ class Database:
                         )
                     """)
         self.connection.commit()
+
+
+
 
 
 
@@ -676,6 +682,24 @@ class Database:
             }
         return None  # Return None if employer profile does not exist
 
+    def update_employer_profile_field(self, user_id: int, field_name: str, new_value: str) -> bool:
+        """Update a specific field in the employer's profile without last_updated column."""
+        if field_name not in ["company_name", "city", "contact_number", "employer_type", "about_company",
+                              "verification_docs"]:
+            raise ValueError(f"Invalid field name: {field_name}")
+
+        try:
+            self.cursor.execute(f"""
+                UPDATE employers
+                SET {field_name} = ?
+                WHERE employer_id = ?
+            """, (new_value, user_id))
+            self.connection.commit()
+            return self.cursor.rowcount > 0
+        except Exception as e:
+            self.connection.rollback()
+            raise Exception(f"Failed to update employer profile field: {str(e)}")
+
     def get_employer_profile_by_user_id(self, user_id):
         self.cursor.execute("""
             SELECT employer_id FROM employers WHERE employer_id = ?
@@ -692,6 +716,24 @@ class Database:
         WHERE e.employer_id = ?
         """, (employer_id,))
         return self.cursor.fetchone()
+
+    def get_employer_info(self, employer_id):
+        """Retrieve employer information from database"""
+        try:
+            self.cursor.execute("""
+                SELECT company_name, city, employer_type 
+                FROM employers 
+                WHERE employer_id = ?
+            """, (employer_id,))
+            result = self.cursor.fetchone()
+            return {
+                'company_name': result[0] if result else None,
+                'city': result[1] if result else None,
+                'employer_type': result[2] if result else None
+            } if result else None
+        except sqlite3.Error as e:
+            logging.error(f"Error fetching employer info: {e}")
+            return None
 
     def save_pending_job_post(self, job_post):
         try:
@@ -853,12 +895,26 @@ class Database:
     def reject_job_post(self, job_id: int, reason: str = "Not specified"):
         """
         Reject a job post and provide a reason for rejection.
+        This updates both the job_posts and vacancies tables.
         """
-        self.cursor.execute(
-            "UPDATE job_posts SET status = ?, reason_for_rejection = ? WHERE id = ?",
-            ("rejected", reason, job_id)  # Set the rejection reason
-        )
-        self.connection.commit()
+        try:
+            # Update job_posts table
+            self.cursor.execute(
+                "UPDATE job_posts SET status = ?, reason_for_rejection = ? WHERE id = ?",
+                ("rejected", reason, job_id)
+            )
+
+            # Update vacancies table status only
+            self.cursor.execute(
+                "UPDATE vacancies SET status = ? WHERE id = ?",
+                ("rejected", job_id)
+            )
+
+            self.connection.commit()
+            print(f"[INFO] Job post {job_id} rejected in both tables.")
+
+        except Exception as e:
+            print(f"[ERROR] Failed to reject job post {job_id}: {e}")
 
     def close(self):
         self.connection.close()
@@ -1027,6 +1083,7 @@ class Database:
         """
         Fetch all applications for a specific job, including user details and job title.
         Returns a list of dictionaries with all application data including job_title.
+        Always returns a list (empty if no results or error occurs).
         """
         try:
             self.cursor.execute("""
@@ -1048,7 +1105,7 @@ class Database:
                     u.skills_experience AS skills, 
                     u.profile_summary,
                     a.id AS job_id,
-                    COALESCE(v.job_title, jp.job_title) AS job_title  -- Get job title from either vacancies or job_posts
+                    COALESCE(v.job_title, jp.job_title) AS job_title
                 FROM applications a
                 INNER JOIN users u ON a.job_seeker_id = u.user_id
                 LEFT JOIN vacancies v ON a.id = v.id
@@ -1057,11 +1114,17 @@ class Database:
             """, (job_id,))
 
             # Convert rows to dictionaries
-            columns = [column[0] for column in self.cursor.description]
-            return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
+            rows = self.cursor.fetchall()
+            columns = self.cursor.description
+
+            if not columns or not rows:
+                return []  # Return empty list instead of None
+
+            columns = [column[0] for column in columns]
+            return [dict(zip(columns, row)) for row in rows]
         except sqlite3.Error as e:
-            logging.error(f"Database error fetching applications with job title: {e}")
-            return []
+            logging.error(f"Database error in get_applications_for_job_with_title: {e}")
+            return []  # Return empty list on error
 
     def get_complete_application_details(self, application_id: int) -> dict:
         """Get all application details with guaranteed dict return"""
@@ -1152,6 +1215,7 @@ class Database:
         """
         Get vacancy details with application statistics
         Returns comprehensive vacancy data with application counts
+        Always returns a dictionary (empty if not found/error)
         """
         try:
             # Get basic vacancy info
@@ -1170,7 +1234,7 @@ class Database:
 
             result = self.cursor.fetchone()
             if not result:
-                return None
+                return {}  # Return empty dict instead of None
 
             vacancy = dict(result)
 
@@ -1185,8 +1249,7 @@ class Database:
 
         except sqlite3.Error as e:
             logging.error(f"Database error in get_vacancy_with_stats: {e}")
-            return None
-
+            return {}  # Return empty dict on error
     def can_resubmit_job_post(self, job_id):
         self.cursor.execute("SELECT status FROM job_posts WHERE id = ?", (job_id,))
         result = self.cursor.fetchone()
@@ -1244,22 +1307,31 @@ class Database:
         """, (user_id,))
         return [dict(row) for row in self.cursor.fetchall()]
 
-    def get_application_details(self, application_id: int) -> dict:
-        """Get full application details including CV file_id"""
-        self.cursor.execute("""
+    def get_application_details(self, application_id):
+        """Get complete application details with consistent field names"""
+        query = """
             SELECT 
-                a.*,
+                a.application_id,
                 v.job_title,
-                v.description,
+                u.full_name AS applicant_name,  
                 e.company_name,
-                u.cv_path
+                a.application_date,
+                a.status,
+                a.cover_letter,
+                u.user_id AS applicant_id,
+                v.id AS vacancy_id
             FROM applications a
             JOIN vacancies v ON a.id = v.id
-            JOIN employers e ON v.employer_id = e.employer_id
             JOIN users u ON a.job_seeker_id = u.user_id
+            JOIN employers e ON v.employer_id = e.employer_id
             WHERE a.application_id = ?
-        """, (application_id,))
-        return dict(self.cursor.fetchone())
+        """
+        self.cursor.execute(query, (application_id,))
+        row = self.cursor.fetchone()
+        if not row:
+            return None
+        columns = [desc[0] for desc in self.cursor.description]
+        return dict(zip(columns, row))
 
     def get_active_vacancies_count(self, employer_id: int) -> int:
         """
@@ -1429,6 +1501,8 @@ class Database:
         except sqlite3.Error as e:
             logging.error(f"Error updating last active time: {e}")
             self.connection.rollback()
+
+
 
     def get_jobs_with_stats(self, employer_id):
         """
@@ -1859,7 +1933,6 @@ class Database:
         }
 
     def can_user_review(self, reviewer_id: int, target_id: int, target_type: str) -> bool:
-        """Check if user can leave a review with all eligibility checks"""
         try:
             from datetime import date
 
@@ -1897,7 +1970,11 @@ class Database:
 
         except Exception as e:
             logging.error(f"Error in can_user_review: {e}")
-            return False  # Fail-safe
+            return False
+
+        except Exception as e:
+            logging.error(f"Error in can_user_review: {e}")
+            return False
 
     def add_review(self, reviewer_id: int, target_id: int, target_type: str,
                    rating: int, comment: str = None, dimension_ratings: dict = None) -> bool:
@@ -2030,6 +2107,38 @@ class Database:
             "one_star_count": stats[3],
             "distribution": self.get_rating_distribution(target_id, target_type)
         }
+
+    def get_user_avg_rating(self, user_id: int, user_type: str = "user") -> float:
+        """
+        Get average rating for a user or bot.
+
+        Args:
+            user_id (int): The ID of the user (or 'bot').
+            user_type (str): 'user' or 'bot' to determine behavior.
+
+        Returns:
+            float: Average rating or 0.0 if none found.
+        """
+        try:
+            if user_type == "bot":
+                self.cursor.execute("""
+                    SELECT AVG(rating) as avg_rating 
+                    FROM reviews 
+                    WHERE target_type = 'bot'
+                """)
+            else:
+                self.cursor.execute("""
+                    SELECT AVG(rating) as avg_rating 
+                    FROM reviews 
+                    WHERE target_id = ? AND target_type IN ('employer', 'job_seeker')
+                """, (user_id,))
+
+            result = self.cursor.fetchone()
+            avg_rating = round(result[0], 1) if result and result[0] is not None else 0.0
+            return avg_rating
+        except Exception as e:
+            logging.error(f"Error getting average rating: {e}")
+            return 0.0
 
     def get_rating_distribution(self, target_id: int, target_type: str) -> dict:
         """Get rating distribution for analytics"""
@@ -2188,6 +2297,134 @@ class Database:
         self.cursor.execute(query, params)
         return self.cursor.fetchall()
 
+    def search_reviews_admin(self, search_term: str = None, target_type: str = None,
+                       sort_by: str = "recent") -> list:
+        """Search reviews with filters and sorting - improved for admin"""
+        query = """
+            SELECT r.id, 
+                   r.reviewer_id, 
+                   r.target_id, 
+                   r.target_type, 
+                   r.rating, 
+                   r.comment, 
+                   r.is_anonymous,
+                   datetime(r.created_at) as created_at,
+                   -- Get target name based on type
+                   COALESCE(e.company_name, u.full_name, 'JobBot') as target_name,
+                   -- Get reviewer name if not anonymous
+                   CASE WHEN r.is_anonymous THEN 'Anonymous' ELSE reviewer.full_name END as reviewer_name,
+                   COALESCE(m.flags_count, 0) as flags_count
+            FROM reviews r
+            LEFT JOIN employers e ON r.target_id = e.employer_id AND r.target_type = 'employer'
+            LEFT JOIN users u ON r.target_id = u.user_id AND r.target_type = 'job_seeker'
+            LEFT JOIN users reviewer ON r.reviewer_id = reviewer.user_id
+            LEFT JOIN review_metadata m ON r.id = m.review_id
+        """
+        params = []
+        conditions = []
+
+        if search_term:
+            conditions.append("""
+                (r.comment LIKE ? OR 
+                 e.company_name LIKE ? OR 
+                 u.full_name LIKE ? OR 
+                 reviewer.full_name LIKE ?)
+            """)
+            search_param = f"%{search_term}%"
+            params.extend([search_param] * 4)
+
+        if target_type:
+            conditions.append("r.target_type = ?")
+            params.append(target_type)
+
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+
+        # Add sorting
+        if sort_by == "recent":
+            query += " ORDER BY r.created_at DESC"
+        elif sort_by == "top":
+            query += " ORDER BY r.rating DESC, r.created_at DESC"
+        elif sort_by == "controversial":
+            query += " ORDER BY flags_count DESC, r.created_at DESC"
+
+        self.cursor.execute(query, params)
+        return [dict(row) for row in self.cursor.fetchall()]
+
+    def get_total_review_count(self) -> int:
+        self.cursor.execute("SELECT COUNT(*) FROM reviews")
+        result = self.cursor.fetchone()
+        return result[0] if result else 0
+
+    def get_overall_average_rating(self) -> float:
+        self.cursor.execute("SELECT AVG(rating) FROM reviews")
+        result = self.cursor.fetchone()
+        return round(result[0], 1) if result and result[0] else 0.0
+
+    def get_all_reviews(self, page: int = 1, per_page: int = 10):
+        """
+        Get all reviews with pagination.
+
+        Args:
+            page (int): Page number (1-indexed)
+            per_page (int): Number of items per page
+
+        Returns:
+            list: List of dictionaries containing review data
+        """
+        offset = (page - 1) * per_page
+        query = """
+            SELECT 
+                r.id,
+                r.reviewer_id,
+                r.target_id,
+                r.target_type,
+                r.rating,
+                r.comment,
+                r.is_anonymous,
+                datetime(r.created_at) as created_at,
+                CASE 
+                    WHEN r.is_anonymous THEN 'Anonymous'
+                    ELSE reviewer.full_name
+                END as reviewer_name,
+                CASE 
+                    WHEN r.target_type = 'employer' THEN e.company_name
+                    WHEN r.target_type = 'job_seeker' THEN u.full_name
+                    ELSE 'JobBot'
+                END as target_name
+            FROM reviews r
+            LEFT JOIN users reviewer ON r.reviewer_id = reviewer.user_id
+            LEFT JOIN employers e ON r.target_id = e.employer_id AND r.target_type = 'employer'
+            LEFT JOIN users u ON r.target_id = u.user_id AND r.target_type = 'job_seeker'
+            ORDER BY r.created_at DESC
+            LIMIT ? OFFSET ?
+        """
+        try:
+            self.cursor.execute(query, (per_page, offset))
+            columns = [col[0] for col in self.cursor.description]
+            results = self.cursor.fetchall()
+            return [dict(zip(columns, row)) for row in results]
+        except Exception as e:
+            logging.error(f"Error fetching all reviews: {e}")
+            return []
+
+    def get_top_reviewed_targets(self, target_type: str, limit: int = 5):
+        self.cursor.execute("""
+            SELECT 
+                CASE WHEN target_type = 'employer' THEN e.company_name
+                     WHEN target_type = 'job_seeker' THEN u.full_name
+                     ELSE 'Bot' END AS target_name,
+                COUNT(*) AS review_count
+            FROM reviews r
+            LEFT JOIN employers e ON r.target_id = e.employer_id AND r.target_type = 'employer'
+            LEFT JOIN users u ON r.target_id = u.user_id AND r.target_type = 'job_seeker'
+            WHERE r.target_type = ?
+            GROUP BY r.target_id, r.target_type
+            ORDER BY review_count DESC
+            LIMIT ?
+        """, (target_type, limit))
+        return self.cursor.fetchall()
+
     def has_user_reviewed(self, user_id: int, target_id: int, target_type: str) -> bool:
         """Check if user already reviewed target today"""
         today = date.today().isoformat()
@@ -2239,33 +2476,39 @@ class Database:
     def get_rateable_users(self, user_id: int) -> list:
         """Get users that the current user can rate"""
         try:
-            # Employers the user has applied to
-            self.cursor.execute("""
-                SELECT DISTINCT 
-                    e.employer_id as id, 
-                    e.company_name as name, 
-                    'employer' as type
-                FROM applications a
-                JOIN vacancies v ON a.id = v.id
-                JOIN employers e ON v.employer_id = e.employer_id
-                WHERE a.job_seeker_id = ?
-            """, (user_id,))
-            employers = self.cursor.fetchall()
+            # Check if user is an employer or job seeker
+            self.cursor.execute("SELECT registration_type FROM users WHERE user_id = ?", (user_id,))
+            user_type_row = self.cursor.fetchone()
+            if not user_type_row:
+                return []
 
-            # Job seekers the employer has hired
-            self.cursor.execute("""
-                SELECT DISTINCT 
-                    a.job_seeker_id as id,
-                    u.full_name as name,
-                    'job_seeker' as type
-                FROM applications a
-                JOIN users u ON a.job_seeker_id = u.user_id
-                JOIN vacancies v ON a.id = v.id
-                WHERE v.employer_id = ?
-            """, (user_id,))
-            job_seekers = self.cursor.fetchall()
+            user_type = user_type_row[0]
+            rateable_users = []
 
-            return employers + job_seekers
+            if user_type == 'job_seeker':
+                # Get employers the job seeker has applied to
+                self.cursor.execute("""
+                    SELECT DISTINCT e.employer_id as id, e.company_name as name, 'employer' as type
+                    FROM applications a
+                    JOIN vacancies v ON a.id = v.id
+                    JOIN employers e ON v.employer_id = e.employer_id
+                    WHERE a.job_seeker_id = ?
+                """, (user_id,))
+                rateable_users = [dict(row) for row in self.cursor.fetchall()]
+
+            elif user_type == 'employer':
+                # Get job seekers who applied to this employer's vacancies
+                self.cursor.execute("""
+                    SELECT DISTINCT a.job_seeker_id as id, u.full_name as name, 'job_seeker' as type
+                    FROM applications a
+                    JOIN users u ON a.job_seeker_id = u.user_id
+                    JOIN vacancies v ON a.id = v.id
+                    WHERE v.employer_id = ?
+                """, (user_id,))
+                rateable_users = [dict(row) for row in self.cursor.fetchall()]
+
+            # Filter out None values
+            return [user for user in rateable_users if user.get('id') is not None]
 
         except Exception as e:
             logging.error(f"Error getting rateable users: {e}")
@@ -2295,6 +2538,24 @@ class Database:
             logging.error(f"Error getting user name: {e}")
             return "Unknown User"
 
+    def get_user_type(self, user_id: int) -> Optional[str]:
+        """Determine if user is employer or job_seeker"""
+        try:
+            # Check if employer exists
+            self.cursor.execute("SELECT 1 FROM employers WHERE employer_id = ?", (user_id,))
+            if self.cursor.fetchone():
+                return 'employer'
+
+            # Check if regular user exists
+            self.cursor.execute("SELECT 1 FROM users WHERE user_id = ?", (user_id,))
+            if self.cursor.fetchone():
+                return 'job_seeker'
+
+            return None
+        except Exception as e:
+            logging.error(f"Error getting user type: {e}")
+            return None
+
     def delete_review(self, review_id: int) -> bool:
         """Delete a review by ID"""
         try:
@@ -2304,6 +2565,7 @@ class Database:
         except Exception as e:
             logging.error(f"Error deleting review: {e}")
             return False
+
 
     def update_review(self, review_id: int, review_data: dict) -> bool:
         """Update an existing review"""
@@ -2330,6 +2592,273 @@ class Database:
             logging.error(f"Error updating review: {e}")
             self.connection.rollback()
             return False
+
+    #report feature
+    def insert_report(self, report_data, reporter_id=None, reported_entity_type=None,
+                      reported_entity_id=None, reason=None, additional_info=""):
+        """
+        Inserts a new report into the database.
+        Can accept either a dictionary of report data or individual parameters.
+        """
+        if isinstance(report_data, dict):
+            # Use dictionary values if provided
+            reporter_id = report_data.get('reporter_id', reporter_id)
+            reported_entity_type = report_data.get('reported_entity_type', reported_entity_type)
+            reported_entity_id = report_data.get('reported_entity_id', reported_entity_id)
+            reason = report_data.get('reason', reason)
+            additional_info = report_data.get('additional_info', additional_info)
+            status = report_data.get('status', 'pending')
+            timestamp = report_data.get('timestamp', datetime.now().isoformat())
+        else:
+            # Default values for individual parameter mode
+            status = 'pending'
+            timestamp = datetime.now().isoformat()
+
+        query = """
+            INSERT INTO reports 
+            (reporter_id, reported_entity_type, reported_entity_id, reason, 
+             additional_info,  timestamp)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """
+        params = (
+            reporter_id,
+            reported_entity_type,
+            reported_entity_id,
+            reason,
+            additional_info,
+            timestamp
+        )
+
+        try:
+            self.cursor.execute(query, params)
+            self.connection.commit()
+            return self.cursor.lastrowid  # Return the ID of the newly created report
+        except Exception as e:
+            logging.error(f"Error inserting report: {str(e)}")
+            self.connection.rollback()
+            return None
+
+    # def get_job_seeker_by_id(self, user_id):
+    #     self.cursor.execute(
+    #         "SELECT user_id, full_name FROM users WHERE user_id = ? AND registration_type = 'job_seeker'", (user_id,))
+    #     row = self.cursor.fetchone()
+    #     return dict(row) if row else None
+    #
+    # def get_employer_by_id(self, employer_id):
+    #     self.cursor.execute("SELECT employer_id, company_name FROM employers WHERE employer_id = ?", (employer_id,))
+    #     row = self.cursor.fetchone()
+    #     return dict(row) if row else None
+    #
+    # def get_application_by_id(self, application_id):
+    #     self.cursor.execute("""
+    #         SELECT v.job_title, u.full_name
+    #         FROM applications a
+    #         JOIN vacancies v ON a.id = v.id
+    #         JOIN users u ON a.job_seeker_id = u.user_id
+    #         WHERE a.application_id = ?
+    #     """, (application_id,))
+    #     row = self.cursor.fetchone()
+    #     return dict(row) if row else None
+    #
+    # def get_vacancy_by_id_report(self, vacancy_id):
+    #     self.cursor.execute("SELECT job_title FROM vacancies WHERE id = ?", (vacancy_id,))
+    #     row = self.cursor.fetchone()
+    #     return dict(row) if row else None
+
+    def get_job_seeker_by_id(self, user_id):
+        self.cursor.execute(
+            """SELECT u.user_id, u.full_name, u.contact_number, u.dob, u.gender, 
+                      u.languages, u.qualification, u.field_of_study, u.cgpa,
+                      u.skills_experience, u.profile_summary, u.cv_path, 
+                      u.portfolio_link, u.registration_type,
+                      m.created_at
+               FROM users u
+               JOIN account_metadata m ON u.user_id = m.user_id
+               WHERE u.user_id = ? AND u.registration_type = 'job_seeker'""",
+            (user_id,))
+        row = self.cursor.fetchone()
+        return dict(row) if row else None
+
+    def get_employer_by_id(self, employer_id):
+        self.cursor.execute(
+            """SELECT e.employer_id, e.company_name, e.city, e.contact_number, 
+                      e.employer_type, e.about_company, e.verification_docs,
+                      m.created_at
+               FROM employers e
+               JOIN account_metadata m ON e.employer_id = m.user_id
+               WHERE e.employer_id = ?""",
+            (employer_id,))
+        row = self.cursor.fetchone()
+        return dict(row) if row else None
+
+    def get_application_by_id(self, application_id):
+        self.cursor.execute("""
+            SELECT 
+                a.application_id, 
+                a.job_seeker_id,
+                a.id AS vacancy_id,
+                a.additional_docs,
+                a.cover_letter,
+                a.application_date,
+                a.status,
+                a.rejection_reason,
+                v.job_title, 
+                v.employment_type,
+                v.level,
+                v.description,
+                v.salary,
+                v.application_deadline,
+                v.status AS vacancy_status,
+                u.full_name AS job_seeker_name,
+                u.contact_number AS job_seeker_contact,
+                e.company_name AS employer_name,
+                e.city AS employer_city
+            FROM applications a
+            JOIN vacancies v ON a.id = v.id
+            JOIN users u ON a.job_seeker_id = u.user_id
+            JOIN employers e ON v.employer_id = e.employer_id
+            WHERE a.application_id = ?
+        """, (application_id,))
+        row = self.cursor.fetchone()
+        return dict(row) if row else None
+
+    def get_vacancy_by_id_report(self, vacancy_id):
+        self.cursor.execute("""
+            SELECT 
+                v.id,
+                v.employer_id,
+                v.job_title,
+                v.employment_type,
+                v.gender,
+                v.quantity,
+                v.level,
+                v.description,
+                v.qualification,
+                v.skills,
+                v.salary,
+                v.benefits,
+                v.application_deadline,
+                v.status,
+                v.source,
+                e.company_name,
+                e.city,
+                e.contact_number AS employer_contact,
+                COUNT(a.application_id) AS application_count
+            FROM vacancies v
+            LEFT JOIN employers e ON v.employer_id = e.employer_id
+            LEFT JOIN applications a ON v.id = a.id
+            WHERE v.id = ?
+            GROUP BY v.id
+        """, (vacancy_id,))
+        row = self.cursor.fetchone()
+        return dict(row) if row else None
+
+    def get_total_report_count(self):
+        self.cursor.execute("SELECT COUNT(*) FROM reports")
+        return self.cursor.fetchone()[0]
+
+    def get_report_count_by_status(self, status):
+        self.cursor.execute("SELECT COUNT(*) FROM reports WHERE report_status = ?", (status,))
+        return self.cursor.fetchone()[0]
+
+    def get_top_reported_entities(self, entity_type, limit=5):
+        query = """
+               SELECT 
+                   reported_entity_id,
+                   COUNT(*) AS report_count
+               FROM reports
+               WHERE reported_entity_type = ?
+               GROUP BY reported_entity_id
+               ORDER BY report_count DESC
+               LIMIT ?
+           """
+        self.cursor.execute(query, (entity_type, limit))
+        top_entities = []
+        for row in self.cursor.fetchall():
+            if entity_type == 'job_seeker':
+                details = self.get_job_seeker_by_id(row['reported_entity_id'])
+            elif entity_type == 'vacancy':
+                details = self.get_vacancy_by_id_report(row['reported_entity_id'])
+            elif entity_type == 'employer':
+                details = self.get_employer_by_id(row['reported_entity_id'])
+            elif entity_type == 'application':
+                details = self.get_application_by_id(row['reported_entity_id'])
+
+            if details:
+                details['report_count'] = row['report_count']
+                top_entities.append(details)
+        return top_entities
+
+    def get_all_reports(self):
+        self.cursor.execute("""
+               SELECT 
+                   r.report_id,
+                   r.reporter_id,
+                   r.reported_entity_type,
+                   r.reported_entity_id,
+                   r.reason,
+                   r.additional_info,
+                   r.report_status,
+                   r.timestamp,
+                   CASE 
+                       WHEN r.reported_entity_type = 'job_seeker' THEN u.full_name
+                       WHEN r.reported_entity_type = 'employer' THEN e.company_name
+                       WHEN r.reported_entity_type = 'vacancy' THEN v.job_title
+                       WHEN r.reported_entity_type = 'application' THEN a.cover_letter
+                   END AS entity_name
+               FROM reports r
+               LEFT JOIN users u ON r.reported_entity_id = u.user_id AND r.reported_entity_type = 'job_seeker'
+               LEFT JOIN employers e ON r.reported_entity_id = e.employer_id AND r.reported_entity_type = 'employer'
+               LEFT JOIN vacancies v ON r.reported_entity_id = v.id AND r.reported_entity_type = 'vacancy'
+               LEFT JOIN applications a ON r.reported_entity_id = a.application_id AND r.reported_entity_type = 'application'
+           """)
+        return [dict(row) for row in self.cursor.fetchall()]
+
+    def get_paginated_reports(self, page: int, page_size: int):
+        offset = (page - 1) * page_size
+        self.cursor.execute("""
+               SELECT * FROM reports
+               ORDER BY timestamp DESC
+               LIMIT ? OFFSET ?
+           """, (page_size, offset))
+        reports = self.cursor.fetchall()
+
+        # Get total pages
+        self.cursor.execute("SELECT COUNT(*) FROM reports")
+        total_items = self.cursor.fetchone()[0]
+        total_pages = (total_items + page_size - 1) // page_size
+
+        return reports, total_pages
+
+    # def get_top_reported_entities(self, entity_type: str, limit: int):
+    #     self.cursor.execute("""
+    #            SELECT
+    #                reported_entity_id,
+    #                COUNT(*) AS report_count
+    #            FROM reports
+    #            WHERE reported_entity_type = ?
+    #            GROUP BY reported_entity_id
+    #            ORDER BY report_count DESC
+    #            LIMIT ?
+    #        """, (entity_type, limit))
+    #     rows = self.cursor.fetchall()
+    #
+    #     # Fetch detailed information for each entity
+    #     entities = []
+    #     for row in rows:
+    #         if entity_type == "job_seeker":
+    #             entity = self.get_job_seeker_by_id(row["reported_entity_id"])
+    #         elif entity_type == "vacancy":
+    #             entity = self.get_vacancy_by_id_report(row["reported_entity_id"])
+    #         elif entity_type == "application":
+    #             entity = self.get_application_by_id(row["reported_entity_id"])
+    #
+    #         if entity:
+    #             entity["report_count"] = row["report_count"]
+    #             entities.append(entity)
+    #
+    #     return entities
+
     #contact admin feature
     def get_contact_categories(self):
         """Retrieve active contact categories from database"""
@@ -2439,24 +2968,82 @@ class Database:
 
         return messages
 
-    def get_category_stats(self) -> list:
-        """Get statistics by category
-        Returns:
-            list: List of dictionaries containing category statistics
-        """
-        self.cursor.execute("""
-        SELECT 
-            cc.name_key as name,
-            cc.emoji,
-            COUNT(cm.id) as count,
-            ROUND(COUNT(cm.id) * 100.0 / (SELECT COUNT(*) FROM contact_messages), 1) as percentage
-        FROM contact_categories cc
-        LEFT JOIN contact_messages cm ON cc.id = cm.category_id
-        GROUP BY cc.id
-        ORDER BY count DESC
-        """)
+    def get_performance_stats(self):
+        """Get basic performance statistics"""
+        try:
+            # Get total messages count
+            self.cursor.execute("SELECT COUNT(*) FROM contact_messages")
+            total = self.cursor.fetchone()[0] or 0
 
-        return [dict(row) for row in self.cursor.fetchall()]
+            # Get pending messages count
+            self.cursor.execute("SELECT COUNT(*) FROM contact_messages WHERE status = 'pending'")
+            pending = self.cursor.fetchone()[0] or 0
+
+            # Get answered messages count
+            self.cursor.execute("SELECT COUNT(*) FROM contact_messages WHERE status = 'answered'")
+            answered = self.cursor.fetchone()[0] or 0
+
+            # Calculate average response time (if any answered messages exist)
+            avg_response = 0
+            if answered > 0:
+                self.cursor.execute("""
+                    SELECT AVG(strftime('%s', answered_at) - strftime('%s', created_at))/3600.0 
+                    FROM contact_messages 
+                    WHERE status = 'answered' AND answered_at IS NOT NULL
+                """)
+                avg_response = round(self.cursor.fetchone()[0] or 0, 1)
+
+            return {
+                'total': total,
+                'pending': pending,
+                'answered': answered,
+                'avg_response_time': avg_response,
+                'satisfaction': "N/A"  # Remove if not using
+            }
+        except Exception as e:
+            print(f"Error getting performance stats: {e}")
+            return {
+                'total': 0,
+                'pending': 0,
+                'answered': 0,
+                'avg_response_time': 0,
+                'satisfaction': "N/A"
+            }
+
+    def get_category_stats(self):
+        """Get statistics grouped by category"""
+        try:
+            # Get total message count for percentages
+            self.cursor.execute("SELECT COUNT(*) FROM contact_messages")
+            total = self.cursor.fetchone()[0] or 1  # Avoid division by zero
+
+            # Get stats per category
+            self.cursor.execute("""
+                SELECT 
+                    c.name_key,
+                    c.emoji,
+                    COUNT(m.id) as count
+                FROM contact_categories c
+                LEFT JOIN contact_messages m ON c.id = m.category_id
+                GROUP BY c.id
+            """)
+
+            categories = []
+            for row in self.cursor.fetchall():
+                name_key, emoji, count = row
+                categories.append({
+                    'name': name_key.replace('contact_', '').replace('_', ' ').title(),
+                    'emoji': emoji,
+                    'count': count,
+                    'percentage': round((count / total) * 100, 1),
+                    'avg_time': "N/A",  # Remove if not needed
+                    'satisfaction': "N/A"  # Remove if not needed
+                })
+
+            return categories
+        except Exception as e:
+            print(f"Error getting category stats: {e}")
+            return []
 
     def update_contact_message(self, message_id: int, admin_id: int, status: str, response: str = None) -> bool:
         """
@@ -2539,6 +3126,30 @@ class Database:
             self.connection.rollback()
             return False
 
+
+
+
+
+    def get_message_count(self, status='all'):
+        """
+        Get the total count of messages based on the status filter.
+
+        Args:
+            status (str): The status to filter by ('all', 'pending', 'answered', etc.)
+
+        Returns:
+            int: The total count of messages matching the status criteria
+        """
+        query = "SELECT COUNT(*) as count FROM contact_messages"
+
+        if status != 'all':
+            query += " WHERE status = ?"
+            self.cursor.execute(query, (status,))
+        else:
+            self.cursor.execute(query)
+
+        result = self.cursor.fetchone()
+        return result['count'] if result else 0
     def search_users(self, search_term, page=1, page_size=5):
         """
         Search for users (job seekers and employers) based on a search term.
@@ -2745,14 +3356,14 @@ class Database:
             logging.error(f"Database error saving application: {e}")
             raise ValueError("Failed to save application") from e
 
-    def get_cover_letter_for_job(self, job_seeker_id: int, id: int) -> str:
+    def get_cover_letter_for_job(self, job_seeker_id: int, job_id: int) -> str:
         """
         Retrieve the cover letter for a specific job application.
         """
         self.cursor.execute("""
         SELECT cover_letter FROM applications 
         WHERE job_seeker_id = ? AND id = ?
-        """, (job_seeker_id, id))
+        """, (job_seeker_id, job_id))
         result = self.cursor.fetchone()
         return result[0] if result else ""
 
@@ -2769,13 +3380,37 @@ class Database:
             print(f"Error adding 'reason_for_rejection' column: {e}")
 
     def has_any_application(self, user_id: int) -> bool:
-        """Check if user has applied to any job"""
-        self.cursor.execute("""
-            SELECT 1 FROM applications 
-            WHERE job_seeker_id = ? 
-            LIMIT 1
-        """, (user_id,))
-        return bool(self.cursor.fetchone())
+        """Check if user has applied to any job (job seeker) or received applications (employer)"""
+        try:
+            # Determine user type
+            self.cursor.execute("SELECT registration_type FROM users WHERE user_id = ?", (user_id,))
+            user_type_row = self.cursor.fetchone()
+            if not user_type_row:
+                return False
+            user_type = user_type_row[0]
+
+            if user_type == 'job_seeker':
+                # Check if job seeker has applied to any job
+                self.cursor.execute("""
+                    SELECT 1 FROM applications 
+                    WHERE job_seeker_id = ? 
+                    LIMIT 1
+                """, (user_id,))
+            elif user_type == 'employer':
+                # Check if employer has received any applications
+                self.cursor.execute("""
+                    SELECT 1 FROM applications a
+                    JOIN vacancies v ON a.id = v.id
+                    WHERE v.employer_id = ?
+                    LIMIT 1
+                """, (user_id,))
+            else:
+                return False
+
+            return bool(self.cursor.fetchone())
+        except Exception as e:
+            logging.error(f"Error checking applications: {e}")
+            return False
 
     def get_user_rating_stats(self, user_id: int) -> dict:
         """
@@ -3135,17 +3770,48 @@ class Database:
         self.connection.commit()
 
     def remove_application(self, application_id):
-        """Remove an application."""
-        self.cursor.execute("DELETE FROM applications WHERE application_id = ?", (application_id,))
-        self.connection.commit()
+        """
+        Remove an application from the database
+        Returns:
+            bool: True if deletion was successful, False otherwise
+        """
+        try:
+            self.cursor.execute("DELETE FROM applications WHERE application_id = ?", (application_id,))
+            self.connection.commit()
+            return self.cursor.rowcount > 0
+        except Exception as e:
+            self.connection.rollback()
+            logging.error(f"Database error removing application {application_id}: {e}")
+            return False
 
     def clear_all_data(self):
         """Clear all data from relevant tables."""
         try:
             # Step 1: Clear dependent tables first (to avoid foreign key constraint violations)
             self.cursor.execute("DELETE FROM applications")  # Applications depend on users and vacancies
+            self.cursor.execute("DELETE FROM account_metadata")
+            self.cursor.execute("DELETE FROM reports")
+            self.cursor.execute("DELETE FROM appeals")  # Appeals may depend on applications or users
+            self.cursor.execute("DELETE FROM rating_privacy")  # Rating privacy may depend on users or reviews
+            self.cursor.execute("DELETE FROM review_metadata")  # Review metadata depends on reviews
+            self.cursor.execute("DELETE FROM review_responses")  # Review responses depend on reviews
+            self.cursor.execute("DELETE FROM admin_notifications")  # Admin notifications may depend on users or events
+            self.cursor.execute("DELETE FROM notifications")  # Notifications may depend on users or events
+            self.cursor.execute("DELETE FROM bot_logs")  # Bot logs are independent but may reference other tables
+            self.cursor.execute("DELETE FROM message_logs")  # Message logs may depend on users or messages
+            self.cursor.execute("DELETE FROM bans")  # Bans depend on users
+            self.cursor.execute("DELETE FROM contact_messages")  # Contact messages are independent
             self.cursor.execute("DELETE FROM vacancies")  # Vacancies depend on employers
-            self.cursor.execute("DELETE FROM employers")  # Employers depend on users
+            self.cursor.execute("DELETE FROM job_posts")  # Job posts depend on vacancies or employers
+            self.cursor.execute("DELETE FROM account_metadata")  # Account metadata depends on users
+            self.cursor.execute("DELETE FROM employers")  # Employers are independent
+            self.cursor.execute("DELETE FROM reviews")  # Reviews may depend on users or employers
+            self.cursor.execute("DELETE FROM bot_errors")  # Bot errors are independent
+            self.cursor.execute("DELETE FROM contact_categories")  # Contact categories are independent
+            self.cursor.execute("DELETE FROM review_limits")  # Review limits are independent
+            self.cursor.execute("DELETE FROM application_decisions")  # Application decisions depend on applications
+            self.cursor.execute("DELETE FROM sqlite_stat1")  # SQLite statistics table, independent
+            self.cursor.execute("DELETE FROM sqlite_sequence")  # SQLite sequence table, independent
 
             # Step 2: Clear the users table
             self.cursor.execute("DELETE FROM users")
@@ -3154,6 +3820,11 @@ class Database:
             self.connection.commit()
         except sqlite3.Error as e:
             self.connection.rollback()
+
+    def delete_table_data(self, table_name):
+        """Delete all data from the specified table."""
+        self.cursor.execute(f"DELETE FROM {table_name}")
+        self.connection.commit()
 
     def normalize_registration_type(self):
         try:
@@ -3385,8 +4056,74 @@ class Database:
             print(f"Database error fetching job post status: {e}")
             return None  # Return None on error
 
-    def get_all_jobs(self):
-        self.cursor.execute("SELECT * FROM job_posts")
+    def get_job_post_status_counts(self) -> dict:
+        """
+        Fetch the aggregated counts of job posts by status.
+        Returns a dictionary with keys: 'pending', 'approved', 'rejected'.
+        """
+        try:
+            # Query the database for counts of each status
+            self.cursor.execute("""
+                SELECT status, COUNT(*) AS count
+                FROM job_posts
+                GROUP BY status
+            """)
+            results = self.cursor.fetchall()
+
+            # Initialize default counts
+            stats = {'pending': 0, 'approved': 0, 'rejected': 0}
+
+            # Populate counts from query results
+            for row in results:
+                status, count = row
+                if status in stats:
+                    stats[status] = count
+
+            return stats
+
+        except sqlite3.Error as e:
+            return {'pending': 0, 'approved': 0, 'rejected': 0}  # Default values on error
+
+    def get_job_post_status_counts_vaccancy(self) -> dict:
+        """
+        Fetch the aggregated counts of job posts by status.
+        Returns a dictionary with keys: 'pending', 'approved', 'rejected'.
+        """
+        try:
+            # Query the database for counts of each status
+            self.cursor.execute("""
+                SELECT status, COUNT(*) AS count
+                FROM vacancies
+                GROUP BY status
+            """)
+            results = self.cursor.fetchall()
+
+            # Initialize default counts
+            stats = {'pending': 0, 'approved': 0, 'rejected': 0}
+
+            # Populate counts from query results
+            for row in results:
+                status, count = row
+                if status in stats:
+                    stats[status] = count
+
+            return stats
+
+        except sqlite3.Error as e:
+            return {'pending': 0, 'approved': 0, 'rejected': 0}  # Default values on error
+
+    def get_all_jobs(self, page=1, page_size=5):
+        """Get all jobs with pagination"""
+        offset = (page - 1) * page_size
+        query = """
+            SELECT j.id, j.job_title, e.company_name AS employer_name,
+                   j.status, j.deadline
+            FROM job_posts j
+            JOIN employers e ON j.employer_id = e.employer_id
+            ORDER BY j.deadline ASC
+            LIMIT ? OFFSET ?
+        """
+        self.cursor.execute(query, (page_size, offset))
         return self.cursor.fetchall()
 
     def get_all_vacancies(self):
@@ -3414,7 +4151,8 @@ class Database:
         term = f"%{search_term}%" if search_term else ""
         self.cursor.execute(query, (search_term, term, term))
         total = self.cursor.fetchone()[0]
-        return (total // page_size) + (1 if total % page_size else 0)
+        # return (total // page_size) + (1 if total % page_size else 0)
+        return (total + page_size - 1) // page_size
 
     def search_employers(self, search_term, page=1, page_size=5):
         offset = (page - 1) * page_size
@@ -3437,32 +4175,44 @@ class Database:
         total = self.cursor.fetchone()[0]
         return (total // page_size) + (1 if total % page_size else 0)
 
-    def search_applications(self, search_term, page=1, page_size=5):
+    def search_applications(self, search_term="", page=1, page_size=5):
+        """Search applications with proper joins"""
         offset = (page - 1) * page_size
         query = """
-            SELECT a.application_id, v.job_title, u.full_name 
+            SELECT 
+                a.application_id,
+                v.job_title,
+                u.full_name AS applicant_name,
+                e.company_name,
+                a.application_date,
+                a.status
             FROM applications a
-            JOIN vacancies v ON a.id = v.id
+            JOIN vacancies v ON a.id = v.id  
             JOIN users u ON a.job_seeker_id = u.user_id
-            WHERE (? = '' OR v.job_title LIKE ? OR u.full_name LIKE ?)
+            JOIN employers e ON v.employer_id = e.employer_id
+            WHERE (? = '' OR v.job_title LIKE ? OR u.full_name LIKE ? OR e.company_name LIKE ?)
+            ORDER BY a.application_date DESC
             LIMIT ? OFFSET ?
         """
-        term = f"%{search_term}%" if search_term else ""
-        self.cursor.execute(query, (search_term, term, term, page_size, offset))
-        return self.cursor.fetchall()
+        term = f"%{search_term}%" if search_term else "%%"
+        self.cursor.execute(query, (search_term, term, term, term, page_size, offset))
+        columns = [desc[0] for desc in self.cursor.description]
+        return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
 
-    def get_total_pages_applications(self, search_term, page_size=5):
+    def get_total_pages_applications(self, search_term="", page_size=5):
+        """Get total pages for applications"""
         query = """
             SELECT COUNT(*) 
             FROM applications a
             JOIN vacancies v ON a.id = v.id
             JOIN users u ON a.job_seeker_id = u.user_id
-            WHERE (? = '' OR v.job_title LIKE ? OR u.full_name LIKE ?)
+            JOIN employers e ON v.employer_id = e.employer_id
+            WHERE (? = '' OR v.job_title LIKE ? OR u.full_name LIKE ? OR e.company_name LIKE ?)
         """
-        term = f"%{search_term}%" if search_term else ""
-        self.cursor.execute(query, (search_term, term, term))
+        term = f"%{search_term}%" if search_term else "%%"
+        self.cursor.execute(query, (search_term, term, term, term))
         total = self.cursor.fetchone()[0]
-        return (total // page_size) + (1 if total % page_size else 0)
+        return (total + page_size - 1) // page_size
 
     def get_all_job_seekers_details(self):
         self.cursor.execute("""
@@ -3483,6 +4233,44 @@ class Database:
         """)
         return self.cursor.fetchall()
 
+    def search_vacancies_report(self, search_term, page=1, page_size=5):
+        offset = (page - 1) * page_size
+        query = """
+            SELECT id, job_title, employer_id, application_deadline 
+            FROM vacancies 
+            WHERE job_title LIKE ? OR CAST(id AS TEXT) LIKE ?
+            LIMIT ? OFFSET ?
+        """
+        term = f"%{search_term}%"
+        self.cursor.execute(query, (term, term, page_size, offset))
+        columns = [desc[0] for desc in self.cursor.description]
+        return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
+
+    def search_job_seekers_report(self, search_term, page=1, page_size=5):
+        offset = (page - 1) * page_size
+        query = """
+            SELECT user_id, full_name FROM users 
+            WHERE registration_type = 'job_seeker'
+            AND (? = '' OR full_name LIKE ? OR CAST(user_id AS TEXT) LIKE ?)
+            LIMIT ? OFFSET ?
+        """
+        term = f"%{search_term}%" if search_term else ""
+        self.cursor.execute(query, (search_term, term, term, page_size, offset))
+        columns = [desc[0] for desc in self.cursor.description]
+        return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
+
+    def search_employers_report(self, search_term, page=1, page_size=5):
+        offset = (page - 1) * page_size
+        query = """
+            SELECT employer_id, company_name FROM employers 
+            WHERE (? = '' OR company_name LIKE ? OR CAST(employer_id AS TEXT) LIKE ?)
+            LIMIT ? OFFSET ?
+        """
+        term = f"%{search_term}%" if search_term else ""
+        self.cursor.execute(query, (search_term, term, term, page_size, offset))
+        columns = [desc[0] for desc in self.cursor.description]
+        return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
+
     def get_all_employers_details(self):
         """Fetch all employer details."""
         self.cursor.execute("""
@@ -3490,6 +4278,22 @@ class Database:
             FROM employers
         """)
         return self.cursor.fetchall()
+
+    def has_verification_docs(self, employer_id):
+        self.cursor.execute("SELECT verification_docs FROM employers WHERE employer_id = ?", (employer_id,))
+        result = self.cursor.fetchone()
+        return result and result[0] is not None
+
+    def get_employer_docs(self, employer_id):
+        self.cursor.execute("""
+            SELECT verification_docs
+            FROM employers 
+            WHERE employer_id = ? AND verification_docs IS NOT NULL
+        """, (employer_id,))
+        result = self.cursor.fetchone()
+        return {
+            'file_id': result[0],
+        } if result else None
 
     def get_all_applications_details(self):
         """Fetch all application details with related job, job seeker, and employer information."""
@@ -3559,31 +4363,37 @@ class Database:
         rows = self.cursor.fetchall()
         return [dict(row) for row in rows]  # Convert rows to dictionaries
 
-    def search_jobs(self, search_term, page=1, page_size=5):
+    def search_jobs(self, search_term="", page=1, page_size=5):
+        """Search jobs with flexible matching"""
         offset = (page - 1) * page_size
         query = """
-            SELECT v.id, v.job_title, e.company_name AS employer_name 
-            FROM vacancies v
-            JOIN employers e ON v.employer_id = e.employer_id
-            WHERE (? = '' OR v.job_title LIKE ? OR e.company_name LIKE ?)
+            SELECT j.id, j.job_title, e.company_name AS employer_name,
+                   j.status, j.deadline
+            FROM job_posts j
+            JOIN employers e ON j.employer_id = e.employer_id
+            WHERE (? = '' OR j.job_title LIKE ? OR e.company_name LIKE ? 
+                  OR j.description LIKE ? OR j.skills LIKE ?)
+            ORDER BY j.deadline ASC
             LIMIT ? OFFSET ?
         """
-        term = f"%{search_term}%" if search_term else ""
-        self.cursor.execute(query, (search_term, term, term, page_size, offset))
+        term = f"%{search_term}%" if search_term else "%%"
+        params = (search_term, term, term, term, term, page_size, offset)
+        self.cursor.execute(query, params)
         return self.cursor.fetchall()
 
-    def get_total_pages_jobs(self, search_term, page_size=5):
+    def get_total_pages_jobs(self, search_term="", page_size=5):
+        """Calculate total pages for jobs"""
         query = """
             SELECT COUNT(*) 
-            FROM vacancies v
-            JOIN employers e ON v.employer_id = e.employer_id
-            WHERE (? = '' OR v.job_title LIKE ? OR e.company_name LIKE ?)
+            FROM job_posts j
+            JOIN employers e ON j.employer_id = e.employer_id
+            WHERE (? = '' OR j.job_title LIKE ? OR e.company_name LIKE ? 
+                  OR j.description LIKE ? OR j.skills LIKE ?)
         """
-        term = f"%{search_term}%" if search_term else ""
-        self.cursor.execute(query, (search_term, term, term))
+        term = f"%{search_term}%" if search_term else "%%"
+        self.cursor.execute(query, (search_term, term, term, term, term))
         total = self.cursor.fetchone()[0]
         return (total // page_size) + (1 if total % page_size else 0)
-
     def search_vacancies(self, search_term, page=1, page_size=5):
         offset = (page - 1) * page_size
         query = """
@@ -3605,7 +4415,99 @@ class Database:
         term = f"%{search_term}%"
         self.cursor.execute(query, (term, term))
         total = self.cursor.fetchone()[0]
-        return (total // page_size) + (1 if total % page_size else 0)
+        return (total + page_size - 1) // page_size
+
+    def remove_vacancy(self, vacancy_id):
+        """
+        Remove a vacancy from the database by ID
+        :param vacancy_id: ID of the vacancy to remove
+        :return: True if successful, False if not found or error occurred
+        """
+        try:
+            # First check if vacancy exists
+            if not self.vacancy_exists(vacancy_id):
+                return False
+
+            # Delete related applications first to maintain referential integrity
+            self.cursor.execute("DELETE FROM applications WHERE id = ?", (vacancy_id,))
+
+            # Now delete the vacancy
+            self.cursor.execute("DELETE FROM vacancies WHERE id = ?", (vacancy_id,))
+            self.connection.commit()
+
+            return self.cursor.rowcount > 0
+        except Exception as e:
+            self.connection.rollback()
+            logging.error(f"Error removing vacancy {id}: {e}")
+            return False
+
+    def remove_job(self, job_id):
+        """
+        Remove a job from the database
+        Returns tuple: (success: bool, message: str)
+        """
+        try:
+            # Check which table contains the job
+            self.cursor.execute("SELECT 1 FROM vacancies WHERE id = ?", (job_id,))
+            in_vacancies = self.cursor.fetchone() is not None
+
+            self.cursor.execute("SELECT 1 FROM job_posts WHERE id = ?", (job_id,))
+            in_job_posts = self.cursor.fetchone() is not None
+
+            if not in_vacancies and not in_job_posts:
+                return False, "Job not found in database"
+
+            # Delete from applications first if exists
+            if in_vacancies:
+                self.cursor.execute("DELETE FROM applications WHERE id = ?", (job_id,))
+            else:
+                self.cursor.execute("DELETE FROM applications WHERE id = ?", (job_id,))
+
+            # Delete the job itself
+            if in_vacancies:
+                self.cursor.execute("DELETE FROM vacancies WHERE id = ?", (job_id,))
+            else:
+                self.cursor.execute("DELETE FROM job_posts WHERE id = ?", (job_id,))
+
+            self.connection.commit()
+
+            if self.cursor.rowcount > 0:
+                return True, f"Successfully deleted job {job_id}"
+            else:
+                return False, "No rows affected - job may have already been deleted"
+
+        except Exception as e:
+            self.connection.rollback()
+            logging.error(f"Error removing job {job_id}: {e}")
+            return False, f"Database error: {str(e)}"
+
+    def job_exists(self, job_id):
+        """Check if a job exists in either vacancies or job_posts"""
+        try:
+            self.cursor.execute("""
+                SELECT EXISTS(
+                    SELECT 1 FROM vacancies WHERE id = ?
+                    UNION ALL
+                    SELECT 1 FROM job_posts WHERE id = ?
+                )
+                """, (job_id, job_id))
+            return self.cursor.fetchone()[0] == 1
+        except Exception as e:
+            logging.error(f"Error checking job existence {job_id}: {e}")
+            return False
+
+    def vacancy_exists(self, vacancy_id):
+        """
+        Check if a vacancy exists in the database
+        :param vacancy_id: ID of the vacancy to check
+        :return: True if exists, False otherwise
+        """
+        try:
+            self.cursor.execute("SELECT 1 FROM vacancies WHERE id = ?", (vacancy_id,))
+            return self.cursor.fetchone() is not None
+        except Exception as e:
+            logging.error(f"Error checking vacancy existence {vacancy_id}: {e}")
+            return False
 
     def get_all_vacancies_details(self):
         self.cursor.execute("""
@@ -3614,6 +4516,77 @@ class Database:
             FROM vacancies
         """)
         return self.cursor.fetchall()
+
+    def get_job_details(self, job_id):
+        """
+        Get complete details of a job including employer info
+        :param job_id: ID of the job to retrieve
+        :return: Dictionary with all job details or None if not found
+        """
+        try:
+            # First try to find in vacancies table
+            self.cursor.execute("""
+                SELECT 
+                    v.*, 
+                    e.company_name, 
+                    e.city AS company_location,
+                    e.contact_number AS company_phone,
+                    e.employer_type,
+                    'vacancy' AS job_type
+                FROM vacancies v
+                LEFT JOIN employers e ON v.employer_id = e.employer_id
+                WHERE v.id = ?
+                UNION ALL
+                SELECT 
+                    jp.id, jp.employer_id, jp.job_title, jp.employment_type, jp.gender, 
+                    jp.quantity, jp.level, jp.description, jp.qualification, jp.skills, 
+                    jp.salary, jp.benefits, jp.deadline AS application_deadline,
+                    jp.status, jp.reason_for_rejection AS source,  -- Adjusted for schema difference
+                    e.company_name, 
+                    e.city AS company_location,
+                    e.contact_number AS company_phone,
+                    e.employer_type,
+                    'job_post' AS job_type
+                FROM job_posts jp
+                LEFT JOIN employers e ON jp.employer_id = e.employer_id
+                WHERE jp.id = ? AND NOT EXISTS (
+                    SELECT 1 FROM vacancies v WHERE v.id = ?
+                )
+                """, (job_id, job_id, job_id))
+
+            row = self.cursor.fetchone()
+            if not row:
+                return None
+
+            # Convert row to dictionary with column names
+            columns = [desc[0] for desc in self.cursor.description]
+            job_details = dict(zip(columns, row))
+
+            # Format the data for better presentation
+            job_details['employment_details'] = {
+                'type': job_details.get('employment_type'),
+                'level': job_details.get('level'),
+                'gender': job_details.get('gender'),
+                'quantity': job_details.get('quantity')
+            }
+
+            job_details['company_details'] = {
+                'name': job_details.get('company_name'),
+                'location': job_details.get('company_location'),
+                'phone': job_details.get('company_phone'),
+                'type': job_details.get('employer_type')
+            }
+
+            # Clean up the original dictionary
+            for key in ['employment_type', 'level', 'gender', 'quantity',
+                        'company_name', 'company_location', 'company_phone', 'employer_type']:
+                job_details.pop(key, None)
+
+            return job_details
+
+        except Exception as e:
+            logging.error(f"Error getting job details {job_id}: {e}")
+            return None
 
     def fetch_notifications(self, limit=10):
         """Fetch pending notifications with a limit."""
@@ -3640,7 +4613,7 @@ class Database:
             # Delete the user's record from the users table
             self.cursor.execute("DELETE FROM users WHERE user_id = ?", (employer_id,))
 
-            self.conn.commit()
+            self.connection.commit()
             print(f"Employer account {employer_id} deleted successfully.")
         except Exception as e:
             print(f"Error deleting employer account {employer_id}: {e}")
@@ -3855,7 +4828,7 @@ class Database:
 
      # Returns list of user_ids of currently logged-in admins
 
-    def search_job_seekers_for_ban(self, search_term, page=1, page_size=5):
+    def search_job_seekers_for_ban(self, search_term, page=1, page_size=10):
         """
         Search for job seekers specifically for banning purposes.
 
@@ -3878,7 +4851,7 @@ class Database:
         self.cursor.execute(query, (search_term, term, term, page_size, offset))
         return self.cursor.fetchall()
 
-    def get_total_pages_job_seekers_for_ban(self, search_term, page_size=5):
+    def get_total_pages_job_seekers_for_ban(self, search_term, page_size=10):
         """
         Get the total number of pages for job seekers specifically for banning purposes.
 
@@ -3899,7 +4872,7 @@ class Database:
         total = self.cursor.fetchone()[0]
         return (total // page_size) + (1 if total % page_size else 0)
 
-    def search_employers_for_ban(self, search_term, page=1, page_size=5):
+    def search_employers_for_ban(self, search_term, page=1, page_size=10):
         """
         Search for employers specifically for banning purposes.
 
@@ -3921,7 +4894,7 @@ class Database:
         self.cursor.execute(query, (search_term, term, term, page_size, offset))
         return self.cursor.fetchall()
 
-    def get_total_pages_employers_for_ban(self, search_term, page_size=5):
+    def get_total_pages_employers_for_ban(self, search_term, page_size=10):
         """
         Get the total number of pages for employers specifically for banning purposes.
 
@@ -3939,7 +4912,7 @@ class Database:
         term = f"%{search_term}%" if search_term else ""
         self.cursor.execute(query, (search_term, term, term))
         total = self.cursor.fetchone()[0]
-        return (total // page_size) + (1 if total % page_size else 0)
+        return (total + page_size - 1) // page_size
 
     def log_error(self, error_data: dict) -> str:
         """Log an error to the database with enhanced details"""
@@ -4033,80 +5006,306 @@ class Database:
             return False
 
 
+    #database status
+    def get_user_growth_rate(self, period='week'):
+        """Returns percentage growth of users compared to previous period."""
+        if period == 'week':
+            self.cursor.execute("""
+                SELECT 
+                    (COUNT(CASE WHEN created_at >= date('now', '-7 days') THEN 1 END) * 100.0) / 
+                    NULLIF(COUNT(CASE WHEN created_at BETWEEN date('now', '-14 days') AND date('now', '-7 days') THEN 1 END), 0)
+                FROM account_metadata 
+            """)
+        elif period == 'month':
+            self.cursor.execute("""
+                SELECT 
+                    (COUNT(CASE WHEN created_at >= date('now', '-30 days') THEN 1 END) * 100.0) / 
+                    NULLIF(COUNT(CASE WHEN created_at BETWEEN date('now', '-60 days') AND date('now', '-30 days') THEN 1 END), 0)
+                FROM account_metadata 
+            """)
+        result = self.cursor.fetchone()[0]
+        return round(result or 0, 2)
 
-    # def migrate_vacancies_table(self):
-    #     try:
-    #         # Step 1: Check if the 'vacancies' table exists
-    #         self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='vacancies';")
-    #         vacancies_exists = self.cursor.fetchone()
+    def get_total_users(self):
+        self.cursor.execute("SELECT COUNT(*) FROM users")
+        return self.cursor.fetchone()[0]
+
+    def get_active_users(self):
+        """Fetch active users based on their last activity in the account_metadata table."""
+        try:
+            self.cursor.execute("""
+                SELECT COUNT(*) 
+                FROM account_metadata 
+                WHERE last_active >= date('now', '-30 days')
+            """)
+            return self.cursor.fetchone()[0]
+        except sqlite3.Error as e:
+            logging.error(f"Database error fetching active users: {e}")
+            return 0
+
+    def get_inactive_users(self):
+        """Fetch inactive users based on their last activity in the account_metadata table."""
+        try:
+            self.cursor.execute("""
+                SELECT COUNT(*) 
+                FROM account_metadata 
+                WHERE last_active < date('now', '-30 days')
+            """)
+            return self.cursor.fetchone()[0]
+        except sqlite3.Error as e:
+            logging.error(f"Database error fetching inactive users: {e}")
+            return 0
+
+    def get_new_users(self, period='today'):
+        """Fetch new users based on the specified period."""
+        try:
+            if period == 'today':
+                self.cursor.execute("SELECT COUNT(*) FROM account_metadata WHERE created_at >= date('now')")
+            elif period == 'last_7_days':
+                self.cursor.execute("SELECT COUNT(*) FROM account_metadata WHERE created_at >= date('now', '-7 days')")
+            elif period == 'last_30_days':
+                self.cursor.execute("SELECT COUNT(*) FROM account_metadata WHERE created_at >= date('now', '-30 days')")
+            return self.cursor.fetchone()[0]
+        except sqlite3.Error as e:
+            logging.error(f"Database error fetching new users: {e}")
+            return 0
+
+    def get_user_last_active(self, user_id: int):
+        """Get the last active timestamp for a specific user."""
+        try:
+            self.cursor.execute("""
+                SELECT last_active 
+                FROM account_metadata 
+                WHERE user_id = ?
+            """, (user_id,))
+            result = self.cursor.fetchone()
+            return result[0] if result else None
+        except sqlite3.Error as e:
+            logging.error(f"Database error fetching last active time: {e}")
+            return None
+
+    def get_rejected_jobs(self):
+        self.cursor.execute("SELECT COUNT(*) FROM job_posts")
+        return self.cursor.fetchone()[0]
+    def get_total_jobs(self, status=None):
+
+        try:
+            query = """
+                SELECT SUM(job_count) AS total_jobs
+                FROM (
+                    SELECT COUNT(*) AS job_count FROM job_posts WHERE status = ? OR ? IS NULL
+                    UNION ALL
+                    SELECT COUNT(*) AS job_count FROM vacancies WHERE status = ? OR ? IS NULL
+                )
+            """
+            self.cursor.execute(query, (status, status, status, status))
+            result = self.cursor.fetchone()
+            return result[0] if result else 0
+        except sqlite3.Error as e:
+            logging.error(f"Database error fetching total jobs: {e}")
+            return 0
+
+    def get_active_jobs(self):
+        self.cursor.execute("""
+               SELECT COUNT(*) FROM vacancies 
+               WHERE status = 'approved' AND application_deadline >= date('now')
+           """)
+        return self.cursor.fetchone()[0]
+
+    def get_completed_jobs(self):
+        self.cursor.execute("SELECT COUNT(*) FROM vacancies WHERE status = 'closed'")
+        return self.cursor.fetchone()[0]
+
+    # def get_average_job_completion_time(self):
+    #     self.cursor.execute("""
+    #            SELECT AVG(julianday(closed_at) - julianday(created_at))
+    #            FROM vacancies
+    #            WHERE status = 'closed'
+    #        """)
+    #     result = self.cursor.fetchone()[0]
+    #     return round(result or 0, 2)
+
+    def get_total_applications(self):
+        self.cursor.execute("SELECT COUNT(*) FROM applications")
+        return self.cursor.fetchone()[0]
+
+    def get_average_applications_per_job(self):
+        self.cursor.execute("""
+               SELECT AVG(app_count) FROM (
+                   SELECT COUNT(*) AS app_count 
+                   FROM applications 
+                   GROUP BY id
+               )
+           """)
+        result = self.cursor.fetchone()[0]
+        return round(result or 0, 2)
+
+    def get_application_count_by_status(self, status):
+        self.cursor.execute("SELECT COUNT(*) FROM applications WHERE status = ?", (status,))
+        return self.cursor.fetchone()[0]
+
+    def get_database_size(self):
+        self.cursor.execute("PRAGMA page_count;")
+        pages = self.cursor.fetchone()[0]
+        self.cursor.execute("PRAGMA page_size;")
+        page_size = self.cursor.fetchone()[0]
+        size_mb = (pages * page_size) / (1024 * 1024)  # Convert to MB properly
+        return f"{size_mb:.2f} MB"
+
+    # def get_last_backup_time(self):
+    #     # Assuming backups are logged in a table called `backups`
+    #     self.cursor.execute("SELECT MAX(backup_time) FROM backups")
+    #     result = self.cursor.fetchone()[0]
+    #     return result or "Never"
+
+    def get_error_rate(self):
+        self.cursor.execute("""
+               SELECT (COUNT(*) * 100.0) / (SELECT COUNT(*) FROM bot_errors)
+               FROM bot_errors WHERE status = 'unresolved'
+           """)
+        result = self.cursor.fetchone()[0]
+        return round(result or 0, 2)
+
+    # def get_new_jobs(self, period='this_week'):
+    #     if period == 'this_week':
+    #         self.cursor.execute(
+    #             "SELECT COUNT(*) FROM job_posts WHERE created_at >= date('now', 'weekday 0', '-7 days')")
+    #     return self.cursor.fetchone()[0]
     #
-    #         if not vacancies_exists:
-    #             print("Vacancies table does not exist. Migration is not needed.")
-    #             return
-    #
-    #         self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='old_vacancies';")
-    #         old_vacancies_exists = self.cursor.fetchone()
-    #
-    #         if old_vacancies_exists:
-    #             # Drop the existing 'old_vacancies' table to avoid conflicts
-    #             print("Old_vacancies table already exists. Dropping it before migration.")
-    #             self.cursor.execute("DROP TABLE old_vacancies;")
-    #             self.connection.commit()
-    #
-    #         # Step 2: Rename the existing 'vacancies' table to 'old_vacancies'
-    #         self.cursor.execute("ALTER TABLE vacancies RENAME TO old_vacancies;")
-    #         print("Renamed 'vacancies' table to 'old_vacancies'.")
-    #
-    #         # Step 3: Create the new 'vacancies' table with 'id' as the primary key
-    #         self.cursor.execute("""
-    #             CREATE TABLE vacancies (
-    #                 id INTEGER PRIMARY KEY,  -- Use the same ID as job_posts
-    #                 employer_id INTEGER NOT NULL,
-    #                 job_title TEXT NOT NULL,
-    #                 employment_type TEXT NOT NULL,
-    #                 gender TEXT NOT NULL CHECK (gender IN ('Male', 'Female', 'Any')),
-    #                 quantity INTEGER NOT NULL CHECK (quantity > 0),
-    #                 level TEXT NOT NULL,
-    #                 description TEXT NOT NULL,
-    #                 qualification TEXT NOT NULL,
-    #                 skills TEXT NOT NULL,
-    #                 salary TEXT,
-    #                 benefits TEXT,
-    #                 application_deadline TEXT NOT NULL ,
-    #                 status TEXT DEFAULT 'approved' CHECK (status IN ('pending', 'approved', 'rejected', 'closed')),
-    #                 source TEXT DEFAULT 'vacancy',
-    #                 FOREIGN KEY (employer_id) REFERENCES employers(employer_id) ON DELETE CASCADE
-    #             );
-    #         """)
-    #         print("Created new 'vacancies' table.")
-    #
-    #         # Step 4: Migrate data from 'old_vacancies' to the new 'vacancies' table
-    #         self.cursor.execute("PRAGMA table_info(old_vacancies);")
-    #         columns = [column[1] for column in self.cursor.fetchall()]
-    #
-    #         if "application_deadline" in columns:
-    #             # Use 'application_deadline' instead of 'deadline'
-    #             self.cursor.execute("""
-    #                 INSERT INTO vacancies (id, employer_id, job_title, employment_type, gender, quantity, level,
-    #                                        description, qualification, skills, salary, benefits, application_deadline, status, source)
-    #                 SELECT id, employer_id, job_title, employment_type, gender, quantity, level,
-    #                        description, qualification, skills, salary, benefits, application_deadline, status, source
-    #                 FROM old_vacancies;
-    #             """)
-    #         else:
-    #             raise ValueError("Column 'application_deadline' not found in old_vacancies table.")
-    #
-    #         print("Migrated data from 'old_vacancies' to 'vacancies'.")
-    #
-    #         # Step 5: Drop the 'old_vacancies' table
-    #         self.cursor.execute("DROP TABLE old_vacancies;")
-    #         print("Dropped 'old_vacancies' table.")
-    #
-    #         # Step 6: Commit changes
-    #         self.connection.commit()
-    #     except sqlite3.Error as e:
-    #         print(f"Error during vacancies table migration: {e}")
-    #         self.connection.rollback()
+    # def get_new_applications(self, period='this_week'):
+    #     if period == 'this_week':
+    #         self.cursor.execute(
+    #             "SELECT COUNT(*) FROM applications WHERE application_date >= date('now', 'weekday 0', '-7 days')")
+    #     return self.cursor.fetchone()[0]
+
+    def get_user_signup_rate(self):
+        self.cursor.execute("""
+               SELECT (COUNT(*) * 100.0) / (SELECT COUNT(*) FROM account_metadata)
+               FROM account_metadata  WHERE created_at >= date('now', '-30 days')
+           """)
+        result = self.cursor.fetchone()[0]
+        return round(result or 0, 2)
+
+    import psutil
+
+
+    def get_system_resources(self):
+        """Fetch CPU and memory usage."""
+        try:
+            cpu_usage = psutil.cpu_percent(interval=1)
+            memory_info = psutil.virtual_memory()
+            memory_usage = memory_info.percent
+            return {
+                "cpu_usage": round(cpu_usage, 2),
+                "memory_usage": round(memory_usage, 2)
+            }
+        except Exception as e:
+            logging.error(f"Error fetching system resources: {e}")
+            return {"cpu_usage": 0, "memory_usage": 0}
+
+
+
+    from datetime import datetime
+
+    def get_bot_uptime(self, start_time):
+        """Calculate bot uptime."""
+        try:
+            uptime_seconds = (datetime.now() - start_time).total_seconds()
+            hours, remainder = divmod(uptime_seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            return f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
+        except Exception as e:
+            logging.error(f"Error calculating bot uptime: {e}")
+            return "N/A"
+
+    # system configuration
+    def get_database_siz(self):
+        """Returns database size in MB as float"""
+        self.cursor.execute("PRAGMA page_count;")
+        pages = self.cursor.fetchone()[0]
+        self.cursor.execute("PRAGMA page_size;")
+        page_size = self.cursor.fetchone()[0]
+        return (pages * page_size) / (1024 * 1024)  # Return float, not formatted string
+
+    def get_table_sizes(self):
+        """Get accurate table sizes for all SQLite versions"""
+        table_sizes = {}
+
+        # Get total database size
+        db_file = self.connection.execute("PRAGMA database_list").fetchone()[2]
+        total_size = os.path.getsize(db_file) / (1024 * 1024)  # in MB
+
+        # Get list of all tables
+        self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [row[0] for row in self.cursor.fetchall()]
+
+        # Temporary method to estimate table sizes
+        for table in tables:
+            # Get row count
+            self.cursor.execute(f"SELECT COUNT(*) FROM {table}")
+            rows = self.cursor.fetchone()[0]
+
+            # Get index count
+            self.cursor.execute(f"""
+                SELECT COUNT(*) FROM sqlite_master 
+                WHERE type='index' AND tbl_name='{table}'
+            """)
+            indexes = self.cursor.fetchone()[0]
+
+            # Estimate size by calculating average row size
+            if rows > 0:
+                # Sample some rows to estimate size
+                self.cursor.execute(f"SELECT * FROM {table} LIMIT 10")
+                sample_rows = self.cursor.fetchall()
+                avg_row_size = sum(len(str(row)) for row in sample_rows) / len(sample_rows) if sample_rows else 100
+                estimated_size = (rows * avg_row_size) / (1024 * 1024)  # MB
+            else:
+                estimated_size = 0.001  # Minimum size for empty tables
+
+            # Add some overhead for indexes
+            estimated_size += indexes * 0.005  # ~5KB per index
+
+            table_sizes[table] = {
+                'size_mb': estimated_size,
+                'rows': rows,
+                'indexes': indexes,
+                'percentage': (estimated_size / total_size * 100) if total_size > 0 else 0
+            }
+
+        # Normalize sizes to match total database size
+        sum_estimated = sum(t['size_mb'] for t in table_sizes.values())
+        if sum_estimated > 0 and total_size > 0:
+            ratio = total_size / sum_estimated
+            for table in table_sizes:
+                table_sizes[table]['size_mb'] *= ratio
+                table_sizes[table]['percentage'] = (table_sizes[table]['size_mb'] / total_size * 100)
+
+        return table_sizes
+
+    def optimize_database(self):
+        """Optimize the database by rebuilding indexes and cleaning up unused space."""
+        try:
+            self.cursor.execute("REINDEX;")
+            self.connection.commit()
+            return True
+        except Exception as e:
+            print(f"Error optimizing database: {e}")
+            return False
+
+    def vacuum_database(self):
+        """Vacuum the database to reclaim unused space."""
+        try:
+            self.cursor.execute("VACUUM;")
+            self.connection.commit()
+            return True
+        except Exception as e:
+            print(f"Error vacuuming database: {e}")
+            return False
+
+
+
+
+
 # Initialize database
 if __name__ == "__main__":
     db = Database()
