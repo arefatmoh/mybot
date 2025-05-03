@@ -2330,7 +2330,7 @@ async def show_profile_completion(update: Update, context: ContextTypes.DEFAULT_
         await query.edit_message_text(text=get_translation(user_id, "profile_not_found"))
         return EDIT_PROFILE
 
-    completion = calculate_profile_completion(user_data)  # You'll need to implement this
+    completion = calculate_profile_completion(user_data)
     valid_fields = [
         "full_name", "contact_number", "dob", "gender", "languages",
         "qualification", "field_of_study", "cgpa", "skills_experience",
@@ -2355,11 +2355,8 @@ async def show_profile_completion(update: Update, context: ContextTypes.DEFAULT_
     )
 
     if completed_fields:
-        completed_lines = ''.join([f"▸ {get_translation(user_id, 'edit_' + f)}\n" for f in completed_fields])
-        message += (
-            f"✅ <b>{get_translation(user_id, 'completed_sections')}:</b>\n"
-            f"{completed_lines}\n"
-        )
+        completed_list = [f'▸ {get_translation(user_id, f"edit_{f}")}\n' for f in completed_fields]
+        message += f"✅ <b>{get_translation(user_id, 'completed_sections')}:</b>\n{''.join(completed_list)}\n"
 
 
 
