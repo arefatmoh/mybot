@@ -5295,7 +5295,7 @@ def format_job_post(user_id, job, bot_username, for_sharing=False):
     gender = escape_html(job['gender'])
     quantity = job['quantity']
     level = escape_html(job['level'])
-    full_description = escape_html(job['description'])  # Store full description
+    full_description = escape_html(job['description'])
     qualification = escape_html(job['qualification'])
     skills = escape_html(job['skills'])
     salary = escape_html(job['salary'])
@@ -5316,26 +5316,32 @@ def format_job_post(user_id, job, bot_username, for_sharing=False):
     details += f"📈 <b>{get_translation(user_id, 'level')}:</b> {level}\n\n"
 
     # --- Description (with truncation) ---
-    description_limit = 250  # Character limit for the preview description
+    description_limit = 250
     description_section = f"📜 <b>{get_translation(user_id, 'description')}:</b>\n"
     if len(full_description) > description_limit:
-        truncated_description = full_description[:description_limit].rsplit(' ', 1)[
-                                    0] + "..."  # Truncate at a word boundary
+        truncated_description = full_description[:description_limit].rsplit(' ', 1)[0] + "..."
         description_section += f"{truncated_description}\n"
-        description_section += f"<i>({get_translation(user_id, 'view_details_prompt')})</i>\n\n"  # "view_details_prompt" needs to be added to your translations
+        description_section += f"<i>({get_translation(user_id, 'view_details_prompt')})</i>\n\n"
     else:
         description_section += f"{full_description}\n\n"
 
     # --- Requirements (Qualification & Skills) ---
+    # FIX: Pre-process the replacements to avoid backslash in f-string
+    formatted_qualification = qualification.replace('\n', '\n• ')
+    formatted_skills = skills.replace('\n', '\n• ')
+
     requirements_section = f"🎯 <b>{get_translation(user_id, 'qualification')}:</b>\n"
-    requirements_section += f"• {qualification.replace('\n', '\n• ')}\n\n"
+    requirements_section += f"• {formatted_qualification}\n\n"  # Use pre-formatted string
     requirements_section += f"🛠️ <b>{get_translation(user_id, 'skills')}:</b>\n"
-    requirements_section += f"• {skills.replace('\n', '\n• ')}\n\n"
+    requirements_section += f"• {formatted_skills}\n\n"  # Use pre-formatted string
 
     # --- Salary and Benefits ---
+    # FIX: Pre-process the replacements to avoid backslash in f-string
+    formatted_benefits = benefits.replace('\n', '\n• ')
+
     salary_benefits_section = f"💰 <b>{get_translation(user_id, 'salary')}:</b> {salary}\n"
     salary_benefits_section += f"🎁 <b>{get_translation(user_id, 'benefits')}:</b>\n"
-    salary_benefits_section += f"• {benefits.replace('\n', '\n• ')}\n\n"
+    salary_benefits_section += f"• {formatted_benefits}\n\n"  # Use pre-formatted string
 
     # --- Urgency and CTA ---
     urgency_cta_section = f"⏳ <b>{get_translation(user_id, 'deadline')}:</b> {deadline}\n"
