@@ -5266,7 +5266,7 @@ def format_job_post(user_id, job, bot_username, for_sharing=False):
         get_translation(user_id, "share_variation_7"),
         get_translation(user_id, "share_variation_8"),
         get_translation(user_id, "share_variation_9"),
-        get_translation(user_id, "share_variation_10")  # Fixed duplicate
+        get_translation(user_id, "share_variation_10")
     ]
 
     opportunity_messages = [
@@ -5304,6 +5304,11 @@ def format_job_post(user_id, job, bot_username, for_sharing=False):
     status = escape_html(job['status'].capitalize())
     job_id = job['job_id']
 
+    # Pre-process strings with newlines
+    formatted_qualification = qualification.replace('\n', '\n• ')
+    formatted_skills = skills.replace('\n', '\n• ')
+    formatted_benefits = benefits.replace('\n', '\n• ')
+
     # --- Header and Job Title ---
     header = f"✨ <b>{job_title}</b> ✨\n"
     header += f"<i>{get_translation(user_id, 'employer')}: {company_name}</i>\n"
@@ -5326,22 +5331,15 @@ def format_job_post(user_id, job, bot_username, for_sharing=False):
         description_section += f"{full_description}\n\n"
 
     # --- Requirements (Qualification & Skills) ---
-    # FIX: Pre-process the replacements to avoid backslash in f-string
-    formatted_qualification = qualification.replace('\n', '\n• ')
-    formatted_skills = skills.replace('\n', '\n• ')
-
     requirements_section = f"🎯 <b>{get_translation(user_id, 'qualification')}:</b>\n"
-    requirements_section += f"• {formatted_qualification}\n\n"  # Use pre-formatted string
+    requirements_section += f"• {formatted_qualification}\n\n"
     requirements_section += f"🛠️ <b>{get_translation(user_id, 'skills')}:</b>\n"
-    requirements_section += f"• {formatted_skills}\n\n"  # Use pre-formatted string
+    requirements_section += f"• {formatted_skills}\n\n"
 
     # --- Salary and Benefits ---
-    # FIX: Pre-process the replacements to avoid backslash in f-string
-    formatted_benefits = benefits.replace('\n', '\n• ')
-
     salary_benefits_section = f"💰 <b>{get_translation(user_id, 'salary')}:</b> {salary}\n"
     salary_benefits_section += f"🎁 <b>{get_translation(user_id, 'benefits')}:</b>\n"
-    salary_benefits_section += f"• {formatted_benefits}\n\n"  # Use pre-formatted string
+    salary_benefits_section += f"• {formatted_benefits}\n\n"
 
     # --- Urgency and CTA ---
     urgency_cta_section = f"⏳ <b>{get_translation(user_id, 'deadline')}:</b> {deadline}\n"
@@ -5360,7 +5358,6 @@ def format_job_post(user_id, job, bot_username, for_sharing=False):
     )
 
     return job_details
-
 
 def escape_html(text):
     """Escape special characters for Telegram HTML formatting."""
