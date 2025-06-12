@@ -1615,5 +1615,7 @@
   "application_status_reviewed": "Ilaalameera",
   "application_status_approved": "Mirkanaa’eera",
   "application_status_rejected": "Dhabameera",
-  "application_status_withdrawn": "Dabarfameera"
+  "application_status_withdrawn": "Dabarfameera",
+   "preview_details": "🔍 Ibsa Guutuu Ilaalaa",
+   "view_details_prompt": "Aka gadiitti yoo galmaaftan faayidaa guutuu ilaali"
  }

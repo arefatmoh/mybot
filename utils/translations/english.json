@@ -927,7 +927,7 @@
     "cancel_post": "Cancel",
     "post_submitted_success": "Your job post has been submitted successfully!",
     "under_review_message": "Your post is now under admin review.",
-    "notification_will_be_sent": "You'll receive a notification once it's approved.",
+    "notification_will_be_sent": "You'll receive a notification once it's approved. Track your job posts anytime in Manage Job Posts (employer menu)",
     "what_to_edit": "Which part would you like to edit?",
     "post_cancelled": "Job post creation cancelled. No information was saved.",
     "post_submission_error": "An error occurred while submitting your post. Please try again later.",
@@ -1289,6 +1289,7 @@
     "deadlined": "Deadline",
     "applications": "Applications",
     "view_applicants": "👀 View Applicants",
+    "preview_details": "🔍 Preview Details",
     "close_job": "🔒 Close Job",
     "stats": "📊 Stats",
     "renew": "🔄 Renew",
@@ -1524,7 +1525,8 @@
   "application_status_reviewed": "Reviewed",
   "application_status_approved": "Approved",
   "application_status_rejected": "Rejected",
-  "application_status_withdrawn": "Withdrawn"
+  "application_status_withdrawn": "Withdrawn",
+   "view_details_prompt": "View full details when applying below"
 
 
 

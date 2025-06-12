@@ -1519,6 +1519,8 @@
     "application_status_reviewed": "Dib loo eegay",
     "application_status_approved": "La oggolaaday",
     "application_status_rejected": "La diiday",
-    "application_status_withdrawn": "Laga noqday"
+    "application_status_withdrawn": "Laga noqday",
+   "preview_details": "🔍 Faahfaahin Hordhac",
+   "view_details_prompt": "Fiiri faahfaahinta buuxda marka aad hoos ka codsaneyso"
  }
 

@@ -5289,78 +5289,68 @@ def format_job_post(user_id, job, bot_username, for_sharing=False):
     banner_emojis = ["✨", "🌟", "⚡", "🔥", "💎", "🚀", "💼", "👔", "🎯", "🏆"]
     banner = "".join(random.choices(banner_emojis, k=11))
 
-    # Format each section separately
-    header = (
-        "<b>╔════════════════════════╗</b>\n\n"
-        f"<b>🌟 {get_translation(user_id, 'job_title')}:</b> <u>{escape_html(job['job_title'])}</u>\n"
-        "<b>━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
-    )
+    job_title = escape_html(job['job_title'])
+    company_name = escape_html(job.get('company_name', 'Not provided'))
+    employment_type = escape_html(job['employment_type'])
+    gender = escape_html(job['gender'])
+    quantity = job['quantity']
+    level = escape_html(job['level'])
+    full_description = escape_html(job['description'])  # Store full description
+    qualification = escape_html(job['qualification'])
+    skills = escape_html(job['skills'])
+    salary = escape_html(job['salary'])
+    benefits = escape_html(job['benefits'])
+    deadline = escape_html(job['deadline'])
+    status = escape_html(job['status'].capitalize())
+    job_id = job['job_id']
 
-    company_info = (
-        f"<b>🏛️ {get_translation(user_id, 'employer')}:</b> <code>{escape_html(job.get('company_name', 'Not provided'))}</code>\n"
-        f"<b>📌 {get_translation(user_id, 'employment_type')}:</b> <code>{escape_html(job['employment_type'])}</code>\n"
-        f"<b>👤 {get_translation(user_id, 'gender')}:</b> <code>{escape_html(job['gender'])}</code>"
-        f"  •  <b>👥 {get_translation(user_id, 'quantity')}:</b> <code>{job['quantity']}</code>\n"
-        f"<b>📈 {get_translation(user_id, 'level')}:</b> <code>{escape_html(job['level'])}</code>\n\n"
-    )
+    # --- Header and Job Title ---
+    header = f"✨ <b>{job_title}</b> ✨\n"
+    header += f"<i>{get_translation(user_id, 'employer')}: {company_name}</i>\n"
+    header += "—" * 17 + "\n\n"
 
-    description = (
-        f"<b>📜 {get_translation(user_id, 'description')}:</b>\n"
-        f"<i>✨ {escape_html(job['description'])}</i>\n\n"
-        "<b>━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
-    )
+    # --- Key Details (arranged for conciseness) ---
+    details = ""
+    details += f"📌 <b>{get_translation(user_id, 'employment_type')}:</b> {employment_type}\n"
+    details += f"👤 <b>{get_translation(user_id, 'gender')}:</b> {gender} | 👥 <b>{get_translation(user_id, 'quantity')}:</b> {quantity}\n"
+    details += f"📈 <b>{get_translation(user_id, 'level')}:</b> {level}\n\n"
 
-    requirements = (
-            f"<b>🎯 {get_translation(user_id, 'qualification')}:</b>\n"
-            "<blockquote>  ✦ {}</blockquote>\n\n".format(
-                escape_html(job['qualification']).replace('\n', '\n  ✦ ')
-            ) +
-            f"<b>🛠️ {get_translation(user_id, 'skills')}:</b>\n"
-            "<blockquote>  ✔️ {}</blockquote>\n\n".format(
-                escape_html(job['skills']).replace('\n', '\n  ✔️ ')
-            ) +
-             "<b>━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
-    )
+    # --- Description (with truncation) ---
+    description_limit = 250  # Character limit for the preview description
+    description_section = f"📜 <b>{get_translation(user_id, 'description')}:</b>\n"
+    if len(full_description) > description_limit:
+        truncated_description = full_description[:description_limit].rsplit(' ', 1)[
+                                    0] + "..."  # Truncate at a word boundary
+        description_section += f"{truncated_description}\n"
+        description_section += f"<i>({get_translation(user_id, 'view_details_prompt')})</i>\n\n"  # "view_details_prompt" needs to be added to your translations
+    else:
+        description_section += f"{full_description}\n\n"
 
-    salary_benefits = (
-        "<b>💰 {}:</b> <code>{}</code>\n\n"
-        "<b>🎁 {}:</b>\n"
-        "<blockquote> ✔️ {}</blockquote>\n\n"
-        "<b>━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
-    ).format(
-        get_translation(user_id, 'salary'),
-        job['salary'],
-        get_translation(user_id, 'benefits'),
-        escape_html(job['benefits']).replace('\n', '\n ✔️ ')
-    )
+    # --- Requirements (Qualification & Skills) ---
+    requirements_section = f"🎯 <b>{get_translation(user_id, 'qualification')}:</b>\n"
+    requirements_section += f"• {qualification.replace('\n', '\n• ')}\n\n"
+    requirements_section += f"🛠️ <b>{get_translation(user_id, 'skills')}:</b>\n"
+    requirements_section += f"• {skills.replace('\n', '\n• ')}\n\n"
 
-    urgency_cta = (
-        "<b>⏳ {}:</b> <code>{}</code>\n"
-        "<b>🟢 {}:</b> <code>{}</code>\n\n"
-        "<b>{}</b>\n"
-        "👉 <a href='https://t.me/{}?start=apply_{}'><b>[🚀 Apply Now]</b></a> 👈\n\n"
-    ).format(
-        get_translation(user_id, 'deadline'),
-        escape_html(job['deadline']),
-        get_translation(user_id, 'status'),
-        escape_html(job['status'].capitalize()),
-        opportunity_text,
-        bot_username,
-        job['job_id']
-    )
+    # --- Salary and Benefits ---
+    salary_benefits_section = f"💰 <b>{get_translation(user_id, 'salary')}:</b> {salary}\n"
+    salary_benefits_section += f"🎁 <b>{get_translation(user_id, 'benefits')}:</b>\n"
+    salary_benefits_section += f"• {benefits.replace('\n', '\n• ')}\n\n"
 
-    footer = (
-        f"<i>{share_text}</i>\n"
-        "<b>╚════════════════════════╝</b>\n\n"
-        "<b><i>{}</i></b>".format(
-            get_translation(user_id, 'posted_via_brand').format(bot_username=bot_username)
-        )
-    )
+    # --- Urgency and CTA ---
+    urgency_cta_section = f"⏳ <b>{get_translation(user_id, 'deadline')}:</b> {deadline}\n"
+    urgency_cta_section += f"🟢 <b>{get_translation(user_id, 'status')}:</b> {status}\n\n"
+    urgency_cta_section += f"{opportunity_text}\n"
+    urgency_cta_section += f"👉 <a href='https://t.me/{bot_username}?start=apply_{job_id}'><b>🚀 Apply Now</b></a> 👈\n\n"
 
-    # Combine all sections
+    # --- Footer ---
+    footer = f"<i>{share_text}</i>\n"
+    footer += f"<i>{get_translation(user_id, 'posted_via_brand').format(bot_username=bot_username)}</i>"
+
+    # --- Combine all sections ---
     job_details = (
-        header + company_info + description
-        + requirements + salary_benefits + urgency_cta + footer
+            header + details + description_section +
+            requirements_section + salary_benefits_section + urgency_cta_section + footer
     )
 
     return job_details
@@ -7024,6 +7014,7 @@ async def display_job_post(job: dict, user_id: int,
                            context: ContextTypes.DEFAULT_TYPE, include_actions: bool):
     """Display single job post with rich formatting"""
     try:
+        context.user_data['last_job'] = job
         # Calculate days remaining (for active jobs)
         days_left = "N/A"
         current_status = job['status'].lower()
@@ -7067,6 +7058,10 @@ async def display_job_post(job: dict, user_id: int,
                 [
                     InlineKeyboardButton(get_translation(user_id, 'stats'), callback_data=f"stats_{job['id']}"),
                     InlineKeyboardButton(get_translation(user_id, 'renew'), callback_data=f"renew_{job['id']}")
+                ],
+                [
+                    InlineKeyboardButton(get_translation(user_id, 'preview_details'),
+                                         callback_data=f"preview_{job['id']}")
                 ]
             ])
         elif current_status == 'expired':
@@ -7078,6 +7073,10 @@ async def display_job_post(job: dict, user_id: int,
                 [
                     InlineKeyboardButton(get_translation(user_id, 'view_applicants'),
                                          callback_data=f"view_apps_{job['id']}")
+                ],
+                [
+                    InlineKeyboardButton(get_translation(user_id, 'preview_details'),
+                                         callback_data=f"preview_{job['id']}")
                 ]
             ])
 
@@ -7095,6 +7094,85 @@ async def display_job_post(job: dict, user_id: int,
             text=f"⚠️ Couldn't display job {job.get('id', '')}"
         )
 
+
+async def preview_job_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    job_id = int(query.data.split('_')[1])
+    user_id = query.from_user.id
+
+    # Fetch the job details from your database
+    job = db.get_job_by_id(job_id)
+
+    if not job:
+        await query.edit_message_text(text="Job not found.")
+        return
+
+    # Format the deadline
+    deadline = job.get('application_deadline', 'Not specified')
+    if deadline:
+        delta = (datetime.strptime(deadline, '%Y-%m-%d') - datetime.now()).days
+        if delta >= 0:
+            deadline = f"{deadline} ({delta} days remaining)"
+        else:
+            deadline = f"{deadline} (Expired)"
+
+    # Format employer contact if available
+    employer_link = ""
+    if job.get('employer_contact'):
+        employer_link = f"<a href='{job['employer_contact']}'>Contact Employer</a>"
+
+    # Build the detailed message
+    job_details = (
+            f"<b>📋 Job Title:</b> {escape_html(job.get('job_title', 'N/A'))}\n"
+            f"<b>🏢 Employer:</b> {escape_html(job.get('employer_name', 'Not provided'))}\n"
+            f"<b>📅 Deadline:</b> {deadline}\n"
+            f"━━━━━━━━━━━━━━━━\n"
+            f"<b>📝 Description:</b>\n{escape_html(job.get('description', ''))}\n"
+            f"━━━━━━━━━━━━━━━━\n"
+            f"<b>💼 Employment Type:</b> {escape_html(job.get('employment_type', 'N/A'))}\n"
+            f"<b>🚻 Gender:</b> {escape_html(job.get('gender', 'N/A'))}\n"
+            f"<b>👥 Quantity:</b> {escape_html(str(job.get('quantity', 'N/A')))}\n"
+            f"<b>🎓 Qualification:</b> {escape_html(job.get('qualification', 'N/A'))}\n"
+            f"<b>📊 Level:</b> {escape_html(job.get('level', 'N/A'))}\n"
+            f"<b>🔑 Skills:</b> {escape_html(job.get('skills', 'N/A'))}\n"
+            f"━━━━━━━━━━━━━━━━\n"
+            f"<b>💰 Salary:</b> {escape_html(job.get('salary', 'Negotiable'))}\n"
+            f"<b>🎁 Benefits:</b> {escape_html(job.get('benefits', 'Negotiable'))}\n"
+
+    )
+
+    # Add a back button to return to the previous view
+    reply_markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton(get_translation(user_id, 'back'), callback_data=f"back_to_job_{job_id}")]
+    ])
+
+    await query.edit_message_text(
+        text=job_details,
+        parse_mode="HTML",
+        reply_markup=reply_markup
+    )
+
+
+async def handle_back_to_job(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    # Get the stored job data
+    job = context.user_data.get('last_job')
+
+    if not job:
+        await query.edit_message_text(text="Job data no longer available.")
+        return
+
+    # Redisplay the job post with actions
+    return await display_job_post(
+        job=job,
+        user_id=query.from_user.id,
+        context=context,
+        include_actions=True
+    )
 def validate_and_format_job_post(job: dict, user_id: int, include_actions: bool) -> tuple:
     """
     Validate and format a job post for display.
@@ -21151,7 +21229,7 @@ async def handle_back_system(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return SYSTEM_CONFIGURATIONS_MENU
 # Conversation Handler
 def main():
-    application = Application.builder().token("7567203189:AAEu1NDdQ0-b8dI39zOwFIdoQ8SUyF5K5p0").build()
+    application = Application.builder().token("7359937673:AAG7l14q7DN2SDDU3P3NlOBafCtMoEtgwGs").build()
 
     # Conversation handler
     conv_handler = ConversationHandler(
@@ -21272,6 +21350,8 @@ def main():
                 CallbackQueryHandler(handle_cv_download, pattern=r"^download_cv_\d+$"),
                 CallbackQueryHandler(export_to_excel, pattern=r"^export_excel_"),
                 CallbackQueryHandler(view_applicants_list, pattern=r"^view_apps_"),
+                CallbackQueryHandler(preview_job_details, pattern=r"^preview_\d+$"),
+                CallbackQueryHandler(handle_back_to_job, pattern=r"^back_to_job_\d+$"),
                 CallbackQueryHandler(handle_applicant_review, pattern=r"^review_\d+$"),
                 CallbackQueryHandler(
                     view_analytics,
@@ -21290,6 +21370,8 @@ def main():
                 CallbackQueryHandler(handle_pagination_callback, pattern=r"^manage_vacancies_(first|prev|next|last)_"),
                 CallbackQueryHandler(handle_vacancy_actions, pattern=r"^(view_apps|close|resubmit|stats|renew)_\d+$"),
                 CallbackQueryHandler(view_applicants_list, pattern=r"^view_apps_"),
+                CallbackQueryHandler(preview_job_details, pattern=r"^preview_\d+$"),
+                CallbackQueryHandler(handle_back_to_job, pattern=r"^back_to_job_\d+$"),
                 CallbackQueryHandler(handle_applicant_review, pattern=r"^review_\d+$"),
                 CallbackQueryHandler(export_to_excel, pattern=r"^export_excel_"),
                 CallbackQueryHandler(handle_cv_download, pattern=r"^download_cv_\d+$")
@@ -21299,6 +21381,8 @@ def main():
                 CallbackQueryHandler(handle_pagination_callback, pattern=r"^manage_vacancies_(first|prev|next|last)_[a-zA-Z]+$"),
                 CallbackQueryHandler(handle_vacancy_actions, pattern=r"^(view_apps|close|resubmit|stats|renew)_\d+$"),
                 CallbackQueryHandler(view_applicants_list, pattern=r"^view_apps_"),
+                CallbackQueryHandler(preview_job_details, pattern=r"^preview_\d+$"),
+                CallbackQueryHandler(handle_back_to_job, pattern=r"^back_to_job_\d+$"),
                 CallbackQueryHandler(handle_applicant_review, pattern=r"^review_\d+$"),
                 CallbackQueryHandler(export_to_excel, pattern=r"^export_excel_"),
                 CallbackQueryHandler(handle_cv_download, pattern=r"^download_cv_\d+$")
@@ -21308,6 +21392,8 @@ def main():
                 CallbackQueryHandler(handle_job_actions, pattern=r"^(view_apps|close|stats|renew)_\d+$"),
                 CallbackQueryHandler(handle_pagination_callback, pattern=r"^manage_vacancies_(first|prev|next|last)_[a-zA-Z]+$"),
                 CallbackQueryHandler(view_applicants_list, pattern=r"^view_apps_"),
+                CallbackQueryHandler(preview_job_details, pattern=r"^preview_\d+$"),
+                CallbackQueryHandler(handle_back_to_job, pattern=r"^back_to_job_\d+$"),
                 CallbackQueryHandler(handle_applicant_review, pattern=r"^review_\d+$"),
                 CallbackQueryHandler(handle_vacancy_actions, pattern=r"^(view_apps|close|resubmit|stats|renew)_\d+$"),
                 CallbackQueryHandler(export_to_excel, pattern=r"^export_excel_"),
@@ -21316,6 +21402,8 @@ def main():
 
             VIEW_APPLICATIONS: [
                 CallbackQueryHandler(view_applicants_list, pattern=r"^view_apps_"),
+                CallbackQueryHandler(preview_job_details, pattern=r"^preview_\d+$"),
+                CallbackQueryHandler(handle_back_to_job, pattern=r"^back_to_job_\d+$"),
                 CallbackQueryHandler(export_to_excel, pattern=r"^export_excel_"),
                 CallbackQueryHandler(handle_applicant_review, pattern=r"^review_\d+$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, select_applicant),
@@ -21327,6 +21415,8 @@ def main():
             ACCEPT_REJECT_CONFIRMATION: [
                 CallbackQueryHandler(handle_accept_reject, pattern="^accept_applicant$|^reject_applicant$"),
                 CallbackQueryHandler(view_applicants_list, pattern=r"^view_apps_"),
+                CallbackQueryHandler(preview_job_details, pattern=r"^preview_\d+$"),
+                CallbackQueryHandler(handle_back_to_job, pattern=r"^back_to_job_\d+$"),
                 CallbackQueryHandler(handle_applicant_review, pattern=r"^review_\d+$"),
                 CallbackQueryHandler(handle_cv_download, pattern=r"^download_cv_\d+$"),
                 CallbackQueryHandler(export_to_excel, pattern=r"^export_excel_"),
@@ -21341,6 +21431,8 @@ def main():
                                      pattern=r"^manage_vacancies_(first|prev|next|last)_[a-zA-Z]+$"),
                 CallbackQueryHandler(handle_vacancy_actions, pattern=r"^(view_apps|close|resubmit|stats|renew)_\d+$"),
                 CallbackQueryHandler(view_applicants_list, pattern=r"^view_apps_"),
+                CallbackQueryHandler(preview_job_details, pattern=r"^preview_\d+$"),
+                CallbackQueryHandler(handle_back_to_job, pattern=r"^back_to_job_\d+$"),
                 CallbackQueryHandler(handle_applicant_review, pattern=r"^review_\d+$"),
                 CallbackQueryHandler(export_to_excel, pattern=r"^export_excel_"),
                 CallbackQueryHandler(handle_cv_download, pattern=r"^download_cv_\d+$")
@@ -21351,6 +21443,8 @@ def main():
                                      pattern=r"^manage_vacancies_(first|prev|next|last)_[a-zA-Z]+$"),
                 CallbackQueryHandler(export_to_excel, pattern=r"^export_excel_"),
                 CallbackQueryHandler(view_applicants_list, pattern=r"^view_apps_"),
+                CallbackQueryHandler(preview_job_details, pattern=r"^preview_\d+$"),
+                CallbackQueryHandler(handle_back_to_job, pattern=r"^back_to_job_\d+$"),
                 CallbackQueryHandler(handle_applicant_review, pattern=r"^review_\d+$"),
                 CallbackQueryHandler(handle_vacancy_actions, pattern=r"^(view_apps|close|resubmit|stats|renew)_\d+$"),
             ],
@@ -21361,6 +21455,8 @@ def main():
                                      pattern=r"^manage_vacancies_(first|prev|next|last)_[a-zA-Z]+$"),
                 CallbackQueryHandler(export_to_excel, pattern=r"^export_excel_"),
                 CallbackQueryHandler(view_applicants_list, pattern=r"^view_apps_"),
+                CallbackQueryHandler(preview_job_details, pattern=r"^preview_\d+$"),
+                CallbackQueryHandler(handle_back_to_job, pattern=r"^back_to_job_\d+$"),
                 CallbackQueryHandler(handle_applicant_review, pattern=r"^review_\d+$"),
                 CallbackQueryHandler(handle_vacancy_actions, pattern=r"^(view_apps|close|resubmit|stats|renew)_\d+$"),
             ],
@@ -21378,6 +21474,8 @@ def main():
                                      pattern=r"^manage_vacancies_(first|prev|next|last)_[a-zA-Z]+$"),
                 CallbackQueryHandler(export_to_excel, pattern=r"^export_excel_"),
                 CallbackQueryHandler(view_applicants_list, pattern=r"^view_apps_"),
+                CallbackQueryHandler(preview_job_details, pattern=r"^preview_\d+$"),
+                CallbackQueryHandler(handle_back_to_job, pattern=r"^back_to_job_\d+$"),
                 CallbackQueryHandler(handle_applicant_review, pattern=r"^review_\d+$"),
                 CallbackQueryHandler(handle_vacancy_actions, pattern=r"^(view_apps|close|resubmit|stats|renew)_\d+$"),
             ],
@@ -21387,6 +21485,8 @@ def main():
                                      pattern=r"^manage_vacancies_(first|prev|next|last)_[a-zA-Z]+$"),
                 CallbackQueryHandler(export_to_excel, pattern=r"^export_excel_"),
                 CallbackQueryHandler(view_applicants_list, pattern=r"^view_apps_"),
+                CallbackQueryHandler(preview_job_details, pattern=r"^preview_\d+$"),
+                CallbackQueryHandler(handle_back_to_job, pattern=r"^back_to_job_\d+$"),
                 CallbackQueryHandler(handle_applicant_review, pattern=r"^review_\d+$"),
                 CallbackQueryHandler(handle_vacancy_actions, pattern=r"^(view_apps|close|resubmit|stats|renew)_\d+$"),
             ],

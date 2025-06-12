@@ -1528,5 +1528,7 @@
     "application_status_reviewed": "ተገምግሟል",
     "application_status_approved": "ተቀባይነት አግኝቷል",
     "application_status_rejected": "ውድቅ ተደርጓል",
-    "application_status_withdrawn": "ተቋርጧል"
+    "application_status_withdrawn": "ተቋርጧል",
+   "preview_details": "🔍 ዝርዝር አስተውል",
+   "view_details_prompt": "ከታች ሲመዝገቡ ሙሉ ዝርዝሩን ይመልከቱ"
  }

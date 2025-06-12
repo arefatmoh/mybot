@@ -1524,7 +1524,9 @@
   "application_status_reviewed": "ተመርመረ",
   "application_status_approved": "ተፈቐደ",
   "application_status_rejected": "ተሰደደ",
-  "application_status_withdrawn": "ተወግደ"
+  "application_status_withdrawn": "ተወግደ",
+  "preview_details": "🔍 ዝርዝር �ረድእ",
+  "view_details_prompt": "በታች ሲመዝገቡ ሙሉ ዝርዝሩን ኣይተዩ"
 }
 
 

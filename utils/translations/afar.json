@@ -1617,12 +1617,13 @@
   "job_search_applications": "🔍 Barbaadinta Shaqo & Codsiga",
   "search_filters": "📂 Barbaado & Filterta",
   "account_management": "🔒 Maareynta Akkaawnta",
-  "ban_appeal": "🚫 Mamnuuc & Dacwad",
      "application_status_pending": "Sugumta",
   "application_status_reviewed": "Eegamee arkamiye",
   "application_status_approved": "Aqbaliye",
   "application_status_rejected": "Diidiye",
-  "application_status_withdrawn": "Kaafe"
+  "application_status_withdrawn": "Kaafe",
+   "preview_details": "🔍 Tiyaagaray Cakkisiyyah",
+    "view_details_prompt": "Gura kaddu galto kee too buuri agayta akkawwan kaay gadiyyi"
 
 
 
